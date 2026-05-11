@@ -2,9 +2,39 @@ import React from "react";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
-import { Platform, View } from "react-native";
+import { Platform, View, Text, StyleSheet } from "react-native";
+import { BadgesProvider, useBadges } from "../../src/badges";
 
-export default function TabsLayout() {
+function IconWithDot({
+  name,
+  color,
+  showDot,
+  count,
+  testID,
+}: {
+  name: keyof typeof Ionicons.glyphMap;
+  color: string;
+  showDot: boolean;
+  count?: number;
+  testID?: string;
+}) {
+  return (
+    <View style={styles.iconWrap}>
+      <Ionicons name={name} size={24} color={color} />
+      {showDot && (
+        <View style={styles.dot} testID={testID}>
+          {count && count > 0 ? (
+            <Text style={styles.dotText}>{count > 9 ? "9+" : count}</Text>
+          ) : null}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function InnerTabs() {
+  const { badges } = useBadges();
+
   return (
     <Tabs
       screenOptions={{
@@ -41,7 +71,13 @@ export default function TabsLayout() {
         options={{
           title: "SHARED",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "people" : "people-outline"} size={24} color={color} />
+            <IconWithDot
+              name={focused ? "people" : "people-outline"}
+              color={color}
+              showDot={badges.shared_new > 0}
+              count={badges.shared_new}
+              testID="shared-badge-dot"
+            />
           ),
           tabBarButtonTestID: "nav-shared",
         }}
@@ -51,7 +87,13 @@ export default function TabsLayout() {
         options={{
           title: "ALERTS",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "notifications" : "notifications-outline"} size={24} color={color} />
+            <IconWithDot
+              name={focused ? "notifications" : "notifications-outline"}
+              color={color}
+              showDot={badges.notifications_unread > 0}
+              count={badges.notifications_unread}
+              testID="notifications-badge-dot"
+            />
           ),
           tabBarButtonTestID: "nav-notifications",
         }}
@@ -69,3 +111,30 @@ export default function TabsLayout() {
     </Tabs>
   );
 }
+
+export default function TabsLayout() {
+  return (
+    <BadgesProvider>
+      <InnerTabs />
+    </BadgesProvider>
+  );
+}
+
+const styles = StyleSheet.create({
+  iconWrap: { width: 30, height: 28, alignItems: "center", justifyContent: "center" },
+  dot: {
+    position: "absolute",
+    top: -4,
+    right: -6,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    backgroundColor: colors.high,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dotText: { color: "#fff", fontSize: 10, fontWeight: "900" },
+});

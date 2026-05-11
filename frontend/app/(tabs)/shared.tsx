@@ -12,11 +12,13 @@ import { useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../src/api";
 import { useAuth } from "../../src/auth";
+import { useBadges } from "../../src/badges";
 import { colors, shadows } from "../../src/theme";
 import TodoCard, { Todo } from "../../src/TodoCard";
 
 export default function SharedWithMe() {
   const { user } = useAuth();
+  const { markSharedSeen } = useBadges();
   const [todos, setTodos] = useState<Todo[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -33,7 +35,8 @@ export default function SharedWithMe() {
   useFocusEffect(
     useCallback(() => {
       load().finally(() => setLoading(false));
-    }, [load])
+      markSharedSeen();
+    }, [load, markSharedSeen])
   );
 
   const onRefresh = async () => {

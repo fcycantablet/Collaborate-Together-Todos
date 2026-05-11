@@ -47,4 +47,7 @@ export const api = {
   getNotifications: () => request("/notifications"),
   markAllRead: () => request("/notifications/mark-all-read", { method: "POST" }),
   unreadCount: () => request("/notifications/unread-count"),
+
+  getBadges: () => request("/badges"),
+  markSharedSeen: () => request("/badges/mark-shared-seen", { method: "POST" }),
 };

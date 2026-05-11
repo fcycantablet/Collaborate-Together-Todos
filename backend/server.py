@@ -424,7 +424,7 @@ async def share_todo(todo_id: str, data: TodoShareRequest, current_user: dict = 
 
     await db.todos.update_one(
         {"id": todo_id},
-        {"$push": {"shared_with": {"user_id": target["id"], "completed": False}}}
+        {"$push": {"shared_with": {"user_id": target["id"], "completed": False, "shared_at": datetime.now(timezone.utc).isoformat()}}}
     )
 
     # Notify target user
@@ -474,6 +474,38 @@ async def unread_count(current_user: dict = Depends(get_current_user)):
         {"user_id": current_user["id"], "read": False}
     )
     return {"count": count}
+
+
+@api_router.get("/badges")
+async def get_badges(current_user: dict = Depends(get_current_user)):
+    """Returns unread notification count and new-shared count since last view."""
+    unread = await db.notifications.count_documents(
+        {"user_id": current_user["id"], "read": False}
+    )
+    last_seen = current_user.get("last_seen_shared_at") or "1970-01-01T00:00:00+00:00"
+    # Count shared todos where this user was shared after last_seen
+    shared_todos = await db.todos.find(
+        {"shared_with.user_id": current_user["id"]},
+        {"_id": 0, "shared_with": 1}
+    ).to_list(10000)
+    shared_new = 0
+    for t in shared_todos:
+        for sw in t.get("shared_with", []):
+            if sw.get("user_id") == current_user["id"]:
+                sw_at = sw.get("shared_at") or "1970-01-01T00:00:00+00:00"
+                if sw_at > last_seen:
+                    shared_new += 1
+                break
+    return {"notifications_unread": unread, "shared_new": shared_new}
+
+
+@api_router.post("/badges/mark-shared-seen")
+async def mark_shared_seen(current_user: dict = Depends(get_current_user)):
+    await db.users.update_one(
+        {"id": current_user["id"]},
+        {"$set": {"last_seen_shared_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"success": True}
 
 
 @api_router.get("/")

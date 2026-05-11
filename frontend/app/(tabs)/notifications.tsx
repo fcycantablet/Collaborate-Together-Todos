@@ -12,6 +12,7 @@ import { useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../src/api";
+import { useBadges } from "../../src/badges";
 import { colors, shadows } from "../../src/theme";
 import { formatDistanceToNow, parseISO } from "date-fns";
 
@@ -27,6 +28,7 @@ type Notif = {
 };
 
 export default function Notifications() {
+  const { markNotificationsRead } = useBadges();
   const [items, setItems] = useState<Notif[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -43,7 +45,13 @@ export default function Notifications() {
   useFocusEffect(
     useCallback(() => {
       load().finally(() => setLoading(false));
-    }, [load])
+      // Auto mark read when visiting tab
+      const t = setTimeout(() => {
+        markNotificationsRead();
+        setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+      }, 1500);
+      return () => clearTimeout(t);
+    }, [load, markNotificationsRead])
   );
 
   const onRefresh = async () => {
@@ -54,7 +62,7 @@ export default function Notifications() {
 
   const markAllRead = async () => {
     try {
-      await api.markAllRead();
+      await markNotificationsRead();
       setItems((prev) => prev.map((n) => ({ ...n, read: true })));
     } catch {}
   };

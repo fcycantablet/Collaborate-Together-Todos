@@ -82,6 +82,10 @@ class TodoShareRequest(BaseModel):
     user_code: str
 
 
+class ReminderRequest(BaseModel):
+    minutes: int  # total minutes from now
+
+
 class TodoResponse(BaseModel):
     id: str
     title: str
@@ -96,6 +100,7 @@ class TodoResponse(BaseModel):
     completed: bool
     created_at: str
     updated_at: Optional[str] = None
+    my_reminder_at: Optional[str] = None  # for current user only
 
 
 # ============ HELPERS ============
@@ -144,7 +149,7 @@ def user_to_response(user: dict) -> UserResponse:
     )
 
 
-async def todo_to_response(todo: dict) -> TodoResponse:
+async def todo_to_response(todo: dict, current_user_id: Optional[str] = None) -> TodoResponse:
     owner = await db.users.find_one({"id": todo["owner_id"]}, {"_id": 0, "name": 1})
     owner_name = owner["name"] if owner else "Unknown"
 
@@ -156,6 +161,14 @@ async def todo_to_response(todo: dict) -> TodoResponse:
             "name": u["name"] if u else "Unknown",
             "completed": sw.get("completed", False),
         })
+
+    # Current user's personal reminder if any
+    my_reminder_at = None
+    if current_user_id:
+        for r in todo.get("personal_reminders", []):
+            if r.get("user_id") == current_user_id:
+                my_reminder_at = r.get("remind_at")
+                break
 
     return TodoResponse(
         id=todo["id"],
@@ -171,6 +184,7 @@ async def todo_to_response(todo: dict) -> TodoResponse:
         completed=todo.get("completed", False),
         created_at=todo["created_at"],
         updated_at=todo.get("updated_at"),
+        my_reminder_at=my_reminder_at,
     )
 
 
@@ -331,13 +345,13 @@ async def create_todo(data: TodoCreate, current_user: dict = Depends(get_current
     }
     await db.todos.insert_one(todo_doc)
     schedule_todo_notification(todo_id, data.scheduled_at)
-    return await todo_to_response(todo_doc)
+    return await todo_to_response(todo_doc, current_user["id"])
 
 
 @api_router.get("/todos", response_model=List[TodoResponse])
 async def get_my_todos(current_user: dict = Depends(get_current_user)):
     todos = await db.todos.find({"owner_id": current_user["id"]}, {"_id": 0}).sort("scheduled_at", 1).to_list(1000)
-    return [await todo_to_response(t) for t in todos]
+    return [await todo_to_response(t, current_user["id"]) for t in todos]
 
 
 @api_router.get("/todos/shared", response_model=List[TodoResponse])
@@ -345,7 +359,7 @@ async def get_shared_with_me(current_user: dict = Depends(get_current_user)):
     todos = await db.todos.find(
         {"shared_with.user_id": current_user["id"]}, {"_id": 0}
     ).sort("scheduled_at", 1).to_list(1000)
-    return [await todo_to_response(t) for t in todos]
+    return [await todo_to_response(t, current_user["id"]) for t in todos]
 
 
 @api_router.delete("/todos/{todo_id}")
@@ -410,7 +424,7 @@ async def update_todo(todo_id: str, data: TodoCreate, current_user: dict = Depen
         await db.notifications.insert_many(notifs)
 
     updated = await db.todos.find_one({"id": todo_id}, {"_id": 0})
-    return await todo_to_response(updated)
+    return await todo_to_response(updated, current_user["id"])
 
 
 @api_router.patch("/todos/{todo_id}/complete")
@@ -458,7 +472,7 @@ async def toggle_complete(todo_id: str, current_user: dict = Depends(get_current
         await db.todos.update_one({"id": todo_id}, {"$set": {"shared_with": shared_list}})
 
     updated = await db.todos.find_one({"id": todo_id}, {"_id": 0})
-    return await todo_to_response(updated)
+    return await todo_to_response(updated, current_user["id"])
 
 
 @api_router.post("/todos/{todo_id}/share", response_model=TodoResponse)
@@ -502,7 +516,112 @@ async def share_todo(todo_id: str, data: TodoShareRequest, current_user: dict = 
     })
 
     updated = await db.todos.find_one({"id": todo_id}, {"_id": 0})
-    return await todo_to_response(updated)
+    return await todo_to_response(updated, current_user["id"])
+
+
+# ============ PERSONAL REMINDERS ============
+async def trigger_personal_reminder(todo_id: str, user_id: str):
+    todo = await db.todos.find_one({"id": todo_id}, {"_id": 0})
+    if not todo:
+        return
+    user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not user:
+        return
+
+    title = f"⏰ Reminder: {todo['title']}"
+    body = todo.get("description") or "Your snoozed reminder"
+
+    if user.get("push_token"):
+        await send_expo_push([user["push_token"]], title, body, {"todo_id": todo_id})
+
+    await db.notifications.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "todo_id": todo_id,
+        "type": "reminder",
+        "title": title,
+        "body": body,
+        "read": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    # Clear the personal_reminder entry after firing
+    await db.todos.update_one(
+        {"id": todo_id},
+        {"$pull": {"personal_reminders": {"user_id": user_id}}}
+    )
+
+
+def schedule_personal_reminder(todo_id: str, user_id: str, remind_at_iso: str):
+    try:
+        remind_dt = datetime.fromisoformat(remind_at_iso.replace("Z", "+00:00"))
+        if remind_dt.tzinfo is None:
+            remind_dt = remind_dt.replace(tzinfo=timezone.utc)
+        if remind_dt <= datetime.now(timezone.utc):
+            return
+        job_id = f"reminder_{todo_id}_{user_id}"
+        if scheduler.get_job(job_id):
+            scheduler.remove_job(job_id)
+        scheduler.add_job(
+            trigger_personal_reminder,
+            trigger=DateTrigger(run_date=remind_dt),
+            args=[todo_id, user_id],
+            id=job_id,
+            replace_existing=True,
+        )
+    except Exception as e:
+        logging.error(f"Schedule personal reminder error: {e}")
+
+
+@api_router.post("/todos/{todo_id}/remind", response_model=TodoResponse)
+async def set_personal_reminder(todo_id: str, data: ReminderRequest, current_user: dict = Depends(get_current_user)):
+    """Set a personal reminder X minutes from now. Owner or any shared user can use this."""
+    if data.minutes <= 0 or data.minutes > 60 * 24 * 7:  # max 1 week
+        raise HTTPException(status_code=400, detail="Minutes must be between 1 and 10080 (1 week)")
+
+    todo = await db.todos.find_one({"id": todo_id}, {"_id": 0})
+    if not todo:
+        raise HTTPException(status_code=404, detail="Todo not found")
+
+    uid = current_user["id"]
+    is_owner = todo["owner_id"] == uid
+    is_shared = any(sw["user_id"] == uid for sw in todo.get("shared_with", []))
+    if not (is_owner or is_shared):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    remind_at = (datetime.now(timezone.utc) + timedelta(minutes=data.minutes)).isoformat()
+
+    # Remove any existing reminder for this user, then add new one
+    await db.todos.update_one(
+        {"id": todo_id},
+        {"$pull": {"personal_reminders": {"user_id": uid}}}
+    )
+    await db.todos.update_one(
+        {"id": todo_id},
+        {"$push": {"personal_reminders": {"user_id": uid, "remind_at": remind_at, "minutes": data.minutes}}}
+    )
+
+    schedule_personal_reminder(todo_id, uid, remind_at)
+
+    updated = await db.todos.find_one({"id": todo_id}, {"_id": 0})
+    return await todo_to_response(updated, uid)
+
+
+@api_router.delete("/todos/{todo_id}/remind", response_model=TodoResponse)
+async def clear_personal_reminder(todo_id: str, current_user: dict = Depends(get_current_user)):
+    todo = await db.todos.find_one({"id": todo_id}, {"_id": 0})
+    if not todo:
+        raise HTTPException(status_code=404, detail="Todo not found")
+    uid = current_user["id"]
+    await db.todos.update_one(
+        {"id": todo_id},
+        {"$pull": {"personal_reminders": {"user_id": uid}}}
+    )
+    job_id = f"reminder_{todo_id}_{uid}"
+    if scheduler.get_job(job_id):
+        scheduler.remove_job(job_id)
+    updated = await db.todos.find_one({"id": todo_id}, {"_id": 0})
+    return await todo_to_response(updated, uid)
 
 
 # ============ NOTIFICATIONS ============

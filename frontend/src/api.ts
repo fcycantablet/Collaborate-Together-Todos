@@ -44,6 +44,9 @@ export const api = {
   toggleComplete: (id: string) => request(`/todos/${id}/complete`, { method: "PATCH" }),
   shareTodo: (id: string, user_code: string) =>
     request(`/todos/${id}/share`, { method: "POST", body: JSON.stringify({ user_code }) }),
+  setReminder: (id: string, minutes: number) =>
+    request(`/todos/${id}/remind`, { method: "POST", body: JSON.stringify({ minutes }) }),
+  clearReminder: (id: string) => request(`/todos/${id}/remind`, { method: "DELETE" }),
 
   getNotifications: () => request("/notifications"),
   markAllRead: () => request("/notifications/mark-all-read", { method: "POST" }),

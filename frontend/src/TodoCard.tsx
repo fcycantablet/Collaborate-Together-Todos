@@ -18,6 +18,7 @@ export type Todo = {
   completed: boolean;
   created_at: string;
   updated_at?: string | null;
+  my_reminder_at?: string | null;
 };
 
 type Props = {
@@ -28,9 +29,21 @@ type Props = {
   onDelete?: () => void;
   onShare?: () => void;
   onEdit?: () => void;
+  onSetReminder?: () => void;
+  onClearReminder?: () => void;
 };
 
-export default function TodoCard({ todo, isOwner, currentUserId, onToggleComplete, onDelete, onShare, onEdit }: Props) {
+export default function TodoCard({
+  todo,
+  isOwner,
+  currentUserId,
+  onToggleComplete,
+  onDelete,
+  onShare,
+  onEdit,
+  onSetReminder,
+  onClearReminder,
+}: Props) {
   let isCompleted = false;
   if (isOwner) {
     isCompleted = todo.completed;
@@ -113,6 +126,30 @@ export default function TodoCard({ todo, isOwner, currentUserId, onToggleComplet
         </Text>
       )}
 
+      {todo.my_reminder_at ? (
+        <View style={styles.reminderChip}>
+          <Ionicons name="alarm" size={14} color={colors.text} />
+          <Text style={styles.reminderText} numberOfLines={1}>
+            Reminding {(() => {
+              try {
+                return formatDistanceToNow(parseISO(todo.my_reminder_at!), { addSuffix: true });
+              } catch {
+                return "soon";
+              }
+            })()}
+          </Text>
+          {onClearReminder && (
+            <TouchableOpacity
+              testID={`todo-clear-reminder-${todo.id}`}
+              onPress={onClearReminder}
+              style={styles.clearReminderBtn}
+            >
+              <Ionicons name="close" size={14} color={colors.text} />
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : null}
+
       {isOwner && todo.shared_with.length > 0 && (
         <View style={styles.sharedList}>
           <Text style={styles.sharedLabel}>SHARED WITH:</Text>
@@ -126,6 +163,17 @@ export default function TodoCard({ todo, isOwner, currentUserId, onToggleComplet
 
       {isOwner && (
         <View style={styles.actions}>
+          {onSetReminder && (
+            <TouchableOpacity
+              testID={`todo-remind-${todo.id}`}
+              style={[styles.actionBtn, { backgroundColor: colors.butter }]}
+              onPress={onSetReminder}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="alarm-outline" size={16} color={colors.text} />
+              <Text style={styles.actionText}>REMIND</Text>
+            </TouchableOpacity>
+          )}
           {onEdit && (
             <TouchableOpacity
               testID={`todo-edit-${todo.id}`}
@@ -159,6 +207,22 @@ export default function TodoCard({ todo, isOwner, currentUserId, onToggleComplet
               <Text style={[styles.actionText, { color: "#fff" }]}>DELETE</Text>
             </TouchableOpacity>
           )}
+        </View>
+      )}
+
+      {!isOwner && onSetReminder && (
+        <View style={styles.actions}>
+          <TouchableOpacity
+            testID={`todo-remind-${todo.id}`}
+            style={[styles.actionBtn, { backgroundColor: colors.butter }]}
+            onPress={onSetReminder}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="alarm-outline" size={16} color={colors.text} />
+            <Text style={styles.actionText}>
+              {todo.my_reminder_at ? "CHANGE REMINDER" : "REMIND ME LATER"}
+            </Text>
+          </TouchableOpacity>
         </View>
       )}
     </View>
@@ -271,4 +335,18 @@ const styles = StyleSheet.create({
   },
   deleteBtn: { backgroundColor: colors.high, borderColor: colors.border },
   actionText: { fontSize: 11, fontWeight: "900", letterSpacing: 1, color: colors.text },
+  reminderChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: colors.butter,
+    borderWidth: 2,
+    borderColor: colors.border,
+    alignSelf: "flex-start",
+  },
+  reminderText: { fontSize: 11, fontWeight: "900", letterSpacing: 0.5, color: colors.text },
+  clearReminderBtn: { marginLeft: 4, padding: 2 },
 });

@@ -8,7 +8,7 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../src/api";
 import { useAuth } from "../../src/auth";
@@ -19,6 +19,7 @@ import TodoCard, { Todo } from "../../src/TodoCard";
 export default function SharedWithMe() {
   const { user } = useAuth();
   const { markSharedSeen } = useBadges();
+  const router = useRouter();
   const [todos, setTodos] = useState<Todo[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -54,6 +55,15 @@ export default function SharedWithMe() {
     }
   };
 
+  const clearReminder = async (id: string) => {
+    try {
+      const updated = await api.clearReminder(id);
+      setTodos((prev) => prev.map((t) => (t.id === id ? updated : t)));
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -80,6 +90,10 @@ export default function SharedWithMe() {
             isOwner={false}
             currentUserId={user?.id || ""}
             onToggleComplete={() => toggleComplete(item.id)}
+            onClearReminder={() => clearReminder(item.id)}
+            onSetReminder={() =>
+              router.push({ pathname: "/set-reminder", params: { todoId: item.id, title: item.title } })
+            }
           />
         )}
         ListEmptyComponent={

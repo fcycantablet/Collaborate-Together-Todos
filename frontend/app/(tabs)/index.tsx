@@ -55,6 +55,15 @@ export default function MyTodos() {
     }
   };
 
+  const clearReminder = async (id: string) => {
+    try {
+      const updated = await api.clearReminder(id);
+      setTodos((prev) => prev.map((t) => (t.id === id ? updated : t)));
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
+    }
+  };
+
   const deleteTodo = (id: string) => {
     const doDelete = async () => {
       try {
@@ -112,6 +121,10 @@ export default function MyTodos() {
             currentUserId={user?.id || ""}
             onToggleComplete={() => toggleComplete(item.id)}
             onDelete={() => deleteTodo(item.id)}
+            onClearReminder={() => clearReminder(item.id)}
+            onSetReminder={() =>
+              router.push({ pathname: "/set-reminder", params: { todoId: item.id, title: item.title } })
+            }
             onEdit={() =>
               router.push({
                 pathname: "/create-todo",

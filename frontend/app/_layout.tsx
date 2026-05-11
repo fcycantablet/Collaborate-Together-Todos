@@ -17,6 +17,7 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="create-todo" options={{ presentation: "modal" }} />
             <Stack.Screen name="share-todo" options={{ presentation: "modal" }} />
+            <Stack.Screen name="set-reminder" options={{ presentation: "modal" }} />
           </Stack>
         </AuthProvider>
       </SafeAreaProvider>

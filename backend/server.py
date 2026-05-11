@@ -86,6 +86,15 @@ class ReminderRequest(BaseModel):
     minutes: int  # total minutes from now
 
 
+class FriendAdd(BaseModel):
+    user_code: str
+    nickname: Optional[str] = None
+
+
+class FriendUpdate(BaseModel):
+    nickname: str
+
+
 class TodoResponse(BaseModel):
     id: str
     title: str
@@ -679,6 +688,85 @@ async def mark_shared_seen(current_user: dict = Depends(get_current_user)):
         {"id": current_user["id"]},
         {"$set": {"last_seen_shared_at": datetime.now(timezone.utc).isoformat()}}
     )
+    return {"success": True}
+
+
+# ============ FRIENDS ============
+@api_router.get("/friends")
+async def list_friends(current_user: dict = Depends(get_current_user)):
+    friends = await db.friends.find(
+        {"owner_id": current_user["id"]}, {"_id": 0}
+    ).sort("nickname", 1).to_list(1000)
+    # Enrich with friend user info
+    result = []
+    for f in friends:
+        u = await db.users.find_one({"id": f["friend_user_id"]}, {"_id": 0, "name": 1, "email": 1, "user_code": 1})
+        if u:
+            result.append({
+                "id": f["id"],
+                "friend_user_id": f["friend_user_id"],
+                "nickname": f["nickname"],
+                "name": u["name"],
+                "email": u["email"],
+                "user_code": u["user_code"],
+                "created_at": f["created_at"],
+            })
+    return result
+
+
+@api_router.post("/friends")
+async def add_friend(data: FriendAdd, current_user: dict = Depends(get_current_user)):
+    target = await db.users.find_one({"user_code": data.user_code.upper().strip()}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User code not found")
+    if target["id"] == current_user["id"]:
+        raise HTTPException(status_code=400, detail="Cannot add yourself as friend")
+
+    existing = await db.friends.find_one({
+        "owner_id": current_user["id"],
+        "friend_user_id": target["id"],
+    })
+    if existing:
+        raise HTTPException(status_code=400, detail="Already in your friends list")
+
+    nickname = (data.nickname or target["name"]).strip() or target["name"]
+    friend_doc = {
+        "id": str(uuid.uuid4()),
+        "owner_id": current_user["id"],
+        "friend_user_id": target["id"],
+        "nickname": nickname,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.friends.insert_one(friend_doc)
+    return {
+        "id": friend_doc["id"],
+        "friend_user_id": target["id"],
+        "nickname": nickname,
+        "name": target["name"],
+        "email": target["email"],
+        "user_code": target["user_code"],
+        "created_at": friend_doc["created_at"],
+    }
+
+
+@api_router.put("/friends/{friend_id}")
+async def update_friend(friend_id: str, data: FriendUpdate, current_user: dict = Depends(get_current_user)):
+    if not data.nickname.strip():
+        raise HTTPException(status_code=400, detail="Nickname required")
+    result = await db.friends.update_one(
+        {"id": friend_id, "owner_id": current_user["id"]},
+        {"$set": {"nickname": data.nickname.strip()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Friend not found")
+    return {"success": True}
+
+
+@api_router.delete("/friends/{friend_id}")
+async def remove_friend(friend_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.friends.delete_one({"id": friend_id, "owner_id": current_user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Friend not found")
     return {"success": True}
 
 

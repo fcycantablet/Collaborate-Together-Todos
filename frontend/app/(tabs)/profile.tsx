@@ -75,6 +75,17 @@ export default function Profile() {
         </View>
 
         <TouchableOpacity
+          testID="friends-btn"
+          style={styles.friendsBtn}
+          onPress={() => router.push("/friends")}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="people" size={20} color={colors.text} />
+          <Text style={styles.friendsBtnText}>MANAGE FRIENDS</Text>
+          <Ionicons name="chevron-forward" size={20} color={colors.text} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
           testID="logout-btn"
           style={styles.logoutBtn}
           onPress={handleLogout}
@@ -135,6 +146,20 @@ const styles = StyleSheet.create({
   },
   infoLabel: { fontSize: 10, fontWeight: "900", letterSpacing: 2, color: colors.textSecondary },
   infoValue: { fontSize: 16, fontWeight: "800", color: colors.text, marginTop: 4 },
+  friendsBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.sky,
+    borderWidth: 2,
+    borderColor: colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    marginTop: 12,
+    minHeight: 56,
+    ...shadows.brutal,
+  },
+  friendsBtnText: { color: colors.text, fontWeight: "900", fontSize: 14, letterSpacing: 1.5, flex: 1, marginLeft: 4 },
   logoutBtn: {
     flexDirection: "row",
     alignItems: "center",

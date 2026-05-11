@@ -54,4 +54,11 @@ export const api = {
 
   getBadges: () => request("/badges"),
   markSharedSeen: () => request("/badges/mark-shared-seen", { method: "POST" }),
+
+  listFriends: () => request("/friends"),
+  addFriend: (user_code: string, nickname: string) =>
+    request("/friends", { method: "POST", body: JSON.stringify({ user_code, nickname }) }),
+  updateFriend: (id: string, nickname: string) =>
+    request(`/friends/${id}`, { method: "PUT", body: JSON.stringify({ nickname }) }),
+  removeFriend: (id: string) => request(`/friends/${id}`, { method: "DELETE" }),
 };

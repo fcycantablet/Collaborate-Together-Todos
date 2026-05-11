@@ -1,0 +1,150 @@
+{
+  "theme": {
+    "domain": "Productivity & Social",
+    "mode": "Light",
+    "archetype": "3 (Pastel & Soft) with Neo-Brutalist Twist",
+    "emotional_tone": "Playful, Tactile, Assertive, Raw but Accessible",
+    "concept": "Rejects boring, sterile productivity apps. Uses hard black borders, deep shadows, and clashing pastels to make checking off tasks feel like an energetic, tactile game."
+  },
+  "colors": {
+    "background": {
+      "app": "#FFFDF9",
+      "card": "#FFFFFF",
+      "modal_overlay": "rgba(10, 10, 10, 0.6)"
+    },
+    "text": {
+      "primary": "#0A0A0A",
+      "secondary": "#52525B",
+      "inverse": "#FFFFFF",
+      "muted": "#71717A"
+    },
+    "borders": {
+      "primary": "#0A0A0A",
+      "light": "#A1A1AA"
+    },
+    "accent_pastels": {
+      "mint": "#A7F3D0",
+      "butter": "#FDE68A",
+      "peach": "#FECDD3",
+      "lavender": "#E9D5FF",
+      "sky": "#BAE6FD"
+    },
+    "priority": {
+      "high": "#FF3B30",
+      "medium": "#FFCC00",
+      "low": "#34C759"
+    },
+    "category": {
+      "Work": "#BAE6FD",
+      "Personal": "#E9D5FF",
+      "Shopping": "#FDE68A",
+      "Health": "#A7F3D0",
+      "Other": "#FECDD3"
+    },
+    "interactive": {
+      "cta_bg": "#0A0A0A",
+      "cta_text": "#FFFFFF",
+      "cta_hover": "#3F3F46"
+    }
+  },
+  "typography": {
+    "font_families": {
+      "heading": "Cabinet Grotesk, sans-serif",
+      "body": "Manrope, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "scale": {
+      "h1": "text-4xl tracking-tighter font-black uppercase",
+      "h2": "text-3xl tracking-tight font-extrabold uppercase",
+      "h3": "text-2xl tracking-tight font-bold",
+      "h4": "text-xl font-bold",
+      "body": "text-base font-medium leading-relaxed text-[#0A0A0A]",
+      "small": "text-sm font-semibold tracking-wide uppercase",
+      "micro": "text-xs font-bold tracking-[0.2em] uppercase"
+    }
+  },
+  "spacing_and_layout": {
+    "container_padding": "p-6",
+    "card_padding": "p-6",
+    "gap_standard": "gap-6",
+    "gap_large": "gap-12",
+    "border_radius": {
+      "cards": "rounded-none",
+      "buttons": "rounded-none",
+      "inputs": "rounded-none",
+      "pills": "rounded-full"
+    },
+    "shadows": {
+      "neo_brutalist": "shadow-[4px_4px_0px_#0A0A0A]",
+      "neo_brutalist_hover": "hover:shadow-[2px_2px_0px_#0A0A0A] hover:translate-x-[2px] hover:translate-y-[2px]",
+      "neo_brutalist_active": "active:shadow-none active:translate-x-[4px] active:translate-y-[4px]",
+      "neo_brutalist_heavy": "shadow-[8px_8px_0px_#0A0A0A]"
+    },
+    "borders": {
+      "thickness": "border-2",
+      "color": "border-[#0A0A0A]"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#0A0A0A] text-white border-2 border-[#0A0A0A] shadow-[4px_4px_0px_#0A0A0A] hover:shadow-[2px_2px_0px_#0A0A0A] hover:translate-x-[2px] hover:translate-y-[2px] active:shadow-none active:translate-x-[4px] active:translate-y-[4px] transition-all font-bold uppercase tracking-wide px-6 py-4 rounded-none min-h-[48px] flex items-center justify-center",
+      "secondary": "bg-white text-[#0A0A0A] border-2 border-[#0A0A0A] shadow-[4px_4px_0px_#0A0A0A] hover:bg-[#FDE68A] hover:shadow-[2px_2px_0px_#0A0A0A] hover:translate-x-[2px] hover:translate-y-[2px] active:shadow-none active:translate-x-[4px] active:translate-y-[4px] transition-all font-bold uppercase tracking-wide px-6 py-4 rounded-none min-h-[48px] flex items-center justify-center",
+      "destructive": "bg-[#FF3B30] text-white border-2 border-[#0A0A0A] shadow-[4px_4px_0px_#0A0A0A] hover:shadow-[2px_2px_0px_#0A0A0A] hover:translate-x-[2px] hover:translate-y-[2px] active:shadow-none active:translate-x-[4px] active:translate-y-[4px] transition-all font-bold uppercase tracking-wide px-6 py-4 rounded-none min-h-[48px] flex items-center justify-center"
+    },
+    "cards": {
+      "todo_item": "bg-white border-2 border-[#0A0A0A] shadow-[4px_4px_0px_#0A0A0A] p-5 rounded-none flex flex-col gap-4 transition-transform hover:-translate-y-1 hover:shadow-[6px_6px_0px_#0A0A0A]",
+      "todo_item_completed": "bg-[#FFFDF9] border-2 border-[#A1A1AA] shadow-none p-5 rounded-none flex flex-col gap-4 opacity-70"
+    },
+    "inputs": {
+      "text": "bg-white border-2 border-[#0A0A0A] p-4 text-base font-bold text-[#0A0A0A] rounded-none focus:outline-none focus:ring-0 focus:shadow-[4px_4px_0px_#0A0A0A] transition-shadow w-full min-h-[48px] placeholder:text-[#A1A1AA]",
+      "checkbox": "w-8 h-8 flex-shrink-0 border-2 border-[#0A0A0A] rounded-none bg-white data-[state=checked]:bg-[#A7F3D0] data-[state=checked]:text-[#0A0A0A] cursor-pointer shadow-[2px_2px_0px_#0A0A0A] transition-all hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]"
+    },
+    "badges": {
+      "category": "px-3 py-1 border-2 border-[#0A0A0A] text-xs font-black uppercase tracking-wide rounded-full shadow-[2px_2px_0px_#0A0A0A]"
+    },
+    "navigation": {
+      "bottom_tab": "fixed bottom-0 left-0 right-0 bg-[#FFFDF9] border-t-2 border-[#0A0A0A] flex justify-around items-center h-[80px] pb-safe z-50 shadow-[0px_-4px_0px_rgba(10,10,10,1)]",
+      "tab_item_active": "text-[#0A0A0A] font-black flex flex-col items-center gap-1 scale-110 transition-transform",
+      "tab_item_inactive": "text-[#A1A1AA] font-bold flex flex-col items-center gap-1 hover:text-[#0A0A0A] transition-colors"
+    }
+  },
+  "patterns": {
+    "empty_states": "Large uncropped 3D/abstract image (max-h-[30vh]), oversized h3 heading, raw pastel background blob, crisp CTA button.",
+    "share_modal": "Centered popup. Background overlay: bg-black/60 backdrop-blur-sm. Modal container: bg-[#FDE68A] border-4 border-[#0A0A0A] shadow-[8px_8px_0px_#0A0A0A] p-8 max-w-[90vw] mx-auto",
+    "profile_code_display": "Massive typography (h1) inside a high-contrast container. e.g., bg-[#A7F3D0] border-4 border-[#0A0A0A] p-6 sm:p-8 text-center shadow-[8px_8px_0px_#0A0A0A]",
+    "notifications_feed": "Stack of simple border-2 border-[#0A0A0A] items with color-coded background tags indicating type (e.g., bg-[#A7F3D0] for 'Task Completed', bg-[#FECDD3] for 'Task Shared')."
+  },
+  "media": {
+    "login_hero": {
+      "url": "https://images.unsplash.com/photo-1756421637139-3f717f5e8410?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTJ8MHwxfHNlYXJjaHwxfHxnZW9tZXRyaWMlMjBwb3AlMjBhcnR8ZW58MHx8fHwxNzc4NDkwNzM3fDA&ixlib=rb-4.1.0&q=85",
+      "description": "Abstract colorful geometric backdrop for the auth screen",
+      "category": "auth_hero"
+    },
+    "empty_state_todos": {
+      "url": "https://images.unsplash.com/photo-1765917921209-b89b1f7bc181?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAxODF8MHwxfHNlYXJjaHwxfHxtaW5pbWFsaXN0JTIwZGVzayUyMHBhc3RlbHxlbnwwfHx8fDE3Nzg0OTA3Mzd8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Minimalist desk elements for the 'No Todos' state",
+      "category": "empty_todos"
+    },
+    "empty_state_notifications": {
+      "url": "https://images.unsplash.com/photo-1764011155422-bee9a05173e3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzd8MHwxfHNlYXJjaHwxfHxzbGVlcGluZyUyMGNhdCUyMG1pbmltYWxpc3R8ZW58MHx8fHwxNzc4NDkwNzM3fDA&ixlib=rb-4.1.0&q=85",
+      "description": "Sleeping cat for the 'No Notifications' sleeping empty state",
+      "category": "empty_notifications"
+    }
+  },
+  "accessibility_and_testing": {
+    "contrast": "All text and interactive borders meet APCA standards. Black #0A0A0A ensures maximum legibility against pastel surfaces.",
+    "testing_attributes": "All interactive elements MUST use data-testid. Examples: data-testid='login-submit-button', data-testid='todo-item-card', data-testid='todo-checkbox', data-testid='share-submit-button', data-testid='nav-my-todos', data-testid='empty-state-container'"
+  },
+  "instructions_to_main_agent": [
+    "Do NOT use soft shadows or rounded cards. Strictly adhere to the neo-brutalist shadow classes provided (e.g., shadow-[4px_4px_0px_#0A0A0A]).",
+    "Ensure 'Cabinet Grotesk' is used for headings and 'Manrope' for body text. Fallback to standard geometric sans-serifs if missing.",
+    "Implement the custom checkbox with the exact styles provided in 'components.inputs.checkbox'. No default blue checkboxes.",
+    "Use Phosphor Icons (bold or fill variants) to match the heavy neo-brutalist aesthetic.",
+    "Ensure mobile tap targets are large (min-h-[48px]). All buttons, tabs, and inputs must respect this ergonomic rule.",
+    "For image attachments inside To-Do cards, add a 2px black border around the thumbnail image. No plain floating images.",
+    "Apply `data-testid` to EVERY interactive element (buttons, tabs, inputs, cards) and significant static elements (empty states).",
+    "The sharing modal should feel like a physical card dropped on top of the UI. Use the 'share_modal' pattern specs.",
+    "Never use purely centered everything. Add tension by left-aligning massive headings and mixing them with asymmetrical floating images.",
+    "Ensure the .js components use these precise Tailwind utility classes. Do not convert them to .tsx as requested by the user."
+  ]
+}

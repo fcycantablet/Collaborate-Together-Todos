@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  ScrollView,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -25,12 +26,30 @@ type Friend = {
   name: string;
   email: string;
   user_code: string;
+};
+
+type IncomingReq = {
+  id: string;
+  from_user_id: string;
+  from_name: string;
+  from_user_code: string;
+  from_nickname: string | null;
+  created_at: string;
+};
+
+type OutgoingReq = {
+  id: string;
+  to_user_id: string;
+  to_name: string;
+  to_user_code: string;
   created_at: string;
 };
 
 export default function Friends() {
   const router = useRouter();
   const [friends, setFriends] = useState<Friend[]>([]);
+  const [incoming, setIncoming] = useState<IncomingReq[]>([]);
+  const [outgoing, setOutgoing] = useState<OutgoingReq[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
@@ -38,13 +57,18 @@ export default function Friends() {
   const [nickname, setNickname] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [acceptNickname, setAcceptNickname] = useState("");
 
   const load = useCallback(async () => {
     try {
-      const data = await api.listFriends();
-      setFriends(data);
+      const [fs, reqs] = await Promise.all([api.listFriends(), api.listFriendRequests()]);
+      setFriends(fs);
+      setIncoming(reqs.incoming || []);
+      setOutgoing(reqs.outgoing || []);
     } catch (e: any) {
       console.log("Load friends error", e.message);
     }
@@ -68,17 +92,49 @@ export default function Friends() {
       return;
     }
     setError("");
+    setSuccess("");
     setSaving(true);
     try {
-      await api.addFriend(code.trim().toUpperCase(), nickname.trim());
+      const res = await api.addFriend(code.trim().toUpperCase(), nickname.trim());
       setCode("");
       setNickname("");
       setShowAdd(false);
+      setSuccess(res.status === "accepted" ? "You're now friends!" : "Friend request sent!");
+      setTimeout(() => setSuccess(""), 2500);
       await load();
     } catch (e: any) {
-      setError(e.message || "Failed to add friend");
+      setError(e.message || "Failed to send request");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const accept = async (id: string) => {
+    try {
+      await api.acceptFriendRequest(id, acceptNickname.trim() || undefined);
+      setAcceptingId(null);
+      setAcceptNickname("");
+      await load();
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
+    }
+  };
+
+  const decline = async (id: string) => {
+    try {
+      await api.declineFriendRequest(id);
+      await load();
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
+    }
+  };
+
+  const cancelOutgoing = async (id: string) => {
+    try {
+      await api.cancelFriendRequest(id);
+      await load();
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
     }
   };
 
@@ -98,15 +154,15 @@ export default function Friends() {
     const doRemove = async () => {
       try {
         await api.removeFriend(f.id);
-        setFriends((prev) => prev.filter((x) => x.id !== f.id));
+        await load();
       } catch (e: any) {
         Alert.alert("Error", e.message);
       }
     };
     if (Platform.OS === "web") {
-      if (typeof window !== "undefined" && window.confirm(`Remove ${f.nickname}?`)) doRemove();
+      if (typeof window !== "undefined" && window.confirm(`Remove ${f.nickname}? This will remove the friendship for both of you.`)) doRemove();
     } else {
-      Alert.alert("Remove Friend", `Remove ${f.nickname}?`, [
+      Alert.alert("Remove Friend", `Remove ${f.nickname}?\nThis will remove the friendship for both of you.`, [
         { text: "Cancel", style: "cancel" },
         { text: "Remove", style: "destructive", onPress: doRemove },
       ]);
@@ -128,146 +184,253 @@ export default function Friends() {
         style={{ flex: 1 }}
       >
         <View style={styles.header}>
-          <TouchableOpacity
-            testID="back-from-friends"
-            onPress={() => router.back()}
-            style={styles.closeBtn}
-          >
+          <TouchableOpacity testID="back-from-friends" onPress={() => router.back()} style={styles.closeBtn}>
             <Ionicons name="chevron-back" size={26} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>FRIENDS</Text>
           <TouchableOpacity
             testID="toggle-add-friend"
-            onPress={() => setShowAdd((v) => !v)}
+            onPress={() => {
+              setShowAdd((v) => !v);
+              setError("");
+            }}
             style={styles.addToggle}
           >
             <Ionicons name={showAdd ? "close" : "person-add"} size={22} color={colors.text} />
           </TouchableOpacity>
         </View>
 
-        {showAdd && (
-          <View style={styles.addCard}>
-            <Text style={styles.label}>FRIEND'S USER CODE</Text>
-            <TextInput
-              testID="add-friend-code"
-              style={styles.codeInput}
-              value={code}
-              onChangeText={(v) => setCode(v.toUpperCase())}
-              placeholder="USR-XXXXXX"
-              placeholderTextColor={colors.borderLight}
-              autoCapitalize="characters"
-              autoCorrect={false}
-            />
-            <Text style={styles.label}>NICKNAME (OPTIONAL)</Text>
-            <TextInput
-              testID="add-friend-nickname"
-              style={styles.input}
-              value={nickname}
-              onChangeText={setNickname}
-              placeholder="e.g. Mom, BFF, Roomie"
-              placeholderTextColor={colors.borderLight}
-            />
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-            <TouchableOpacity
-              testID="submit-add-friend"
-              style={[styles.primaryBtn, saving && { opacity: 0.6 }]}
-              onPress={handleAdd}
-              disabled={saving}
-              activeOpacity={0.8}
-            >
-              {saving ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.primaryBtnText}>ADD FRIEND</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
-
-        <FlatList
-          data={friends}
-          keyExtractor={(item) => item.id}
+        <ScrollView
           contentContainerStyle={styles.list}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.text} />}
-          renderItem={({ item }) => (
-            <View style={styles.friendCard} testID={`friend-${item.id}`}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>
-                  {item.nickname.charAt(0).toUpperCase()}
-                </Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                {editingId === item.id ? (
-                  <View style={styles.editRow}>
-                    <TextInput
-                      testID={`edit-nickname-${item.id}`}
-                      style={styles.editInput}
-                      value={editingValue}
-                      onChangeText={setEditingValue}
-                      autoFocus
-                    />
-                    <TouchableOpacity
-                      testID={`save-nickname-${item.id}`}
-                      style={styles.editBtnSave}
-                      onPress={() => saveNickname(item.id)}
-                    >
-                      <Ionicons name="checkmark" size={18} color="#fff" />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.editBtnCancel}
-                      onPress={() => {
-                        setEditingId(null);
-                        setEditingValue("");
-                      }}
-                    >
-                      <Ionicons name="close" size={18} color={colors.text} />
-                    </TouchableOpacity>
-                  </View>
+        >
+          {showAdd && (
+            <View style={styles.addCard}>
+              <Text style={styles.label}>FRIEND'S USER CODE</Text>
+              <TextInput
+                testID="add-friend-code"
+                style={styles.codeInput}
+                value={code}
+                onChangeText={(v) => setCode(v.toUpperCase())}
+                placeholder="USR-XXXXXX"
+                placeholderTextColor={colors.borderLight}
+                autoCapitalize="characters"
+                autoCorrect={false}
+              />
+              <Text style={styles.label}>NICKNAME (OPTIONAL)</Text>
+              <TextInput
+                testID="add-friend-nickname"
+                style={styles.input}
+                value={nickname}
+                onChangeText={setNickname}
+                placeholder="e.g. Mom, BFF, Roomie"
+                placeholderTextColor={colors.borderLight}
+              />
+              {error ? <Text style={styles.error}>{error}</Text> : null}
+              <TouchableOpacity
+                testID="submit-add-friend"
+                style={[styles.primaryBtn, saving && { opacity: 0.6 }]}
+                onPress={handleAdd}
+                disabled={saving}
+                activeOpacity={0.8}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#fff" />
                 ) : (
-                  <>
-                    <Text style={styles.nickname} numberOfLines={1}>{item.nickname}</Text>
-                    <Text style={styles.realName} numberOfLines={1}>
-                      {item.name} · {item.user_code}
-                    </Text>
-                  </>
+                  <Text style={styles.primaryBtnText}>SEND REQUEST</Text>
                 )}
-              </View>
-              {editingId !== item.id && (
-                <>
-                  <TouchableOpacity
-                    testID={`edit-friend-${item.id}`}
-                    style={styles.iconBtn}
-                    onPress={() => {
-                      setEditingId(item.id);
-                      setEditingValue(item.nickname);
-                    }}
-                  >
-                    <Ionicons name="create-outline" size={18} color={colors.text} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    testID={`remove-friend-${item.id}`}
-                    style={[styles.iconBtn, { backgroundColor: colors.high }]}
-                    onPress={() => removeFriend(item)}
-                  >
-                    <Ionicons name="trash-outline" size={18} color="#fff" />
-                  </TouchableOpacity>
-                </>
-              )}
+              </TouchableOpacity>
             </View>
           )}
-          ListEmptyComponent={
+
+          {success ? (
+            <View style={styles.successBox}>
+              <Ionicons name="checkmark-circle" size={20} color={colors.low} />
+              <Text style={styles.successText}>{success}</Text>
+            </View>
+          ) : null}
+
+          {incoming.length > 0 && (
+            <>
+              <Text style={styles.sectionHeader}>INCOMING REQUESTS · {incoming.length}</Text>
+              {incoming.map((r) => (
+                <View key={r.id} style={[styles.friendCard, { backgroundColor: colors.peach }]} testID={`req-incoming-${r.id}`}>
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarText}>{r.from_name.charAt(0).toUpperCase()}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.nickname}>{r.from_name}</Text>
+                    <Text style={styles.realName}>{r.from_user_code}{r.from_nickname ? ` · "${r.from_nickname}"` : ""}</Text>
+                  </View>
+                  {acceptingId === r.id ? null : (
+                    <>
+                      <TouchableOpacity
+                        testID={`accept-req-${r.id}`}
+                        style={[styles.iconBtn, { backgroundColor: colors.low }]}
+                        onPress={() => {
+                          setAcceptingId(r.id);
+                          setAcceptNickname(r.from_nickname || r.from_name);
+                        }}
+                      >
+                        <Ionicons name="checkmark" size={20} color="#fff" />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        testID={`decline-req-${r.id}`}
+                        style={[styles.iconBtn, { backgroundColor: colors.high }]}
+                        onPress={() => decline(r.id)}
+                      >
+                        <Ionicons name="close" size={20} color="#fff" />
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </View>
+              ))}
+              {acceptingId && (() => {
+                const r = incoming.find((x) => x.id === acceptingId);
+                if (!r) return null;
+                return (
+                  <View style={styles.acceptCard}>
+                    <Text style={styles.label}>SET A NICKNAME FOR {r.from_name.toUpperCase()}</Text>
+                    <TextInput
+                      testID="accept-nickname-input"
+                      style={styles.input}
+                      value={acceptNickname}
+                      onChangeText={setAcceptNickname}
+                      placeholder={r.from_name}
+                      placeholderTextColor={colors.borderLight}
+                      autoFocus
+                    />
+                    <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
+                      <TouchableOpacity
+                        testID="confirm-accept"
+                        style={[styles.primaryBtn, { flex: 1, marginTop: 0 }]}
+                        onPress={() => accept(r.id)}
+                      >
+                        <Text style={styles.primaryBtnText}>ACCEPT</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.primaryBtn, { flex: 1, marginTop: 0, backgroundColor: colors.card }]}
+                        onPress={() => {
+                          setAcceptingId(null);
+                          setAcceptNickname("");
+                        }}
+                      >
+                        <Text style={[styles.primaryBtnText, { color: colors.text }]}>CANCEL</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })()}
+            </>
+          )}
+
+          {outgoing.length > 0 && (
+            <>
+              <Text style={styles.sectionHeader}>SENT REQUESTS · {outgoing.length}</Text>
+              {outgoing.map((r) => (
+                <View key={r.id} style={[styles.friendCard, { backgroundColor: colors.bg }]} testID={`req-outgoing-${r.id}`}>
+                  <View style={[styles.avatar, { backgroundColor: colors.borderLight }]}>
+                    <Text style={styles.avatarText}>{r.to_name.charAt(0).toUpperCase()}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.nickname}>{r.to_name}</Text>
+                    <Text style={styles.realName}>Pending · {r.to_user_code}</Text>
+                  </View>
+                  <TouchableOpacity
+                    testID={`cancel-req-${r.id}`}
+                    style={[styles.iconBtn, { backgroundColor: colors.high }]}
+                    onPress={() => cancelOutgoing(r.id)}
+                  >
+                    <Ionicons name="close" size={18} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </>
+          )}
+
+          <Text style={styles.sectionHeader}>YOUR FRIENDS · {friends.length}</Text>
+          {friends.length === 0 ? (
             <View style={styles.empty} testID="empty-friends">
               <View style={styles.emptyBlock}>
                 <Text style={styles.emptyEmoji}>👋</Text>
                 <Text style={styles.emptyTitle}>NO FRIENDS YET</Text>
                 <Text style={styles.emptyDesc}>
-                  Tap the + icon and add a friend using their user code.{"\n"}
-                  Then you can share to-dos with one tap.
+                  Tap + to send a friend request using their user code.
                 </Text>
               </View>
             </View>
-          }
-        />
+          ) : (
+            <FlatList
+              data={friends}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+              renderItem={({ item }) => (
+                <View style={styles.friendCard} testID={`friend-${item.id}`}>
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarText}>{item.nickname.charAt(0).toUpperCase()}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    {editingId === item.id ? (
+                      <View style={styles.editRow}>
+                        <TextInput
+                          testID={`edit-nickname-${item.id}`}
+                          style={styles.editInput}
+                          value={editingValue}
+                          onChangeText={setEditingValue}
+                          autoFocus
+                        />
+                        <TouchableOpacity
+                          testID={`save-nickname-${item.id}`}
+                          style={styles.editBtnSave}
+                          onPress={() => saveNickname(item.id)}
+                        >
+                          <Ionicons name="checkmark" size={18} color="#fff" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.editBtnCancel}
+                          onPress={() => {
+                            setEditingId(null);
+                            setEditingValue("");
+                          }}
+                        >
+                          <Ionicons name="close" size={18} color={colors.text} />
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <>
+                        <Text style={styles.nickname} numberOfLines={1}>{item.nickname}</Text>
+                        <Text style={styles.realName} numberOfLines={1}>
+                          {item.name} · {item.user_code}
+                        </Text>
+                      </>
+                    )}
+                  </View>
+                  {editingId !== item.id && (
+                    <>
+                      <TouchableOpacity
+                        testID={`edit-friend-${item.id}`}
+                        style={styles.iconBtn}
+                        onPress={() => {
+                          setEditingId(item.id);
+                          setEditingValue(item.nickname);
+                        }}
+                      >
+                        <Ionicons name="create-outline" size={18} color={colors.text} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        testID={`remove-friend-${item.id}`}
+                        style={[styles.iconBtn, { backgroundColor: colors.high }]}
+                        onPress={() => removeFriend(item)}
+                      >
+                        <Ionicons name="trash-outline" size={18} color="#fff" />
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </View>
+              )}
+            />
+          )}
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -298,10 +461,10 @@ const styles = StyleSheet.create({
   },
   addCard: {
     backgroundColor: colors.card,
-    margin: 16,
     padding: 16,
     borderWidth: 2,
     borderColor: colors.border,
+    marginBottom: 16,
     ...shadows.brutalHeavy,
   },
   label: { fontSize: 10, fontWeight: "900", letterSpacing: 2, color: colors.text, marginTop: 8, marginBottom: 6 },
@@ -341,7 +504,26 @@ const styles = StyleSheet.create({
   },
   primaryBtnText: { color: "#fff", fontWeight: "900", letterSpacing: 1.5, fontSize: 13 },
   error: { color: colors.high, fontWeight: "800", marginTop: 8, fontSize: 12 },
-  list: { padding: 16, paddingBottom: 80, flexGrow: 1 },
+  successBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 12,
+    backgroundColor: colors.mint,
+    borderWidth: 2,
+    borderColor: colors.border,
+    marginBottom: 16,
+  },
+  successText: { fontWeight: "800", color: colors.text, fontSize: 13 },
+  sectionHeader: {
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 2,
+    color: colors.textSecondary,
+    marginTop: 16,
+    marginBottom: 10,
+  },
+  list: { padding: 16, paddingBottom: 80 },
   friendCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -353,6 +535,14 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     ...shadows.brutal,
     shadowOffset: { width: 3, height: 3 },
+  },
+  acceptCard: {
+    backgroundColor: colors.peach,
+    padding: 14,
+    borderWidth: 2,
+    borderColor: colors.border,
+    marginBottom: 12,
+    ...shadows.brutalHeavy,
   },
   avatar: {
     width: 44,
@@ -367,8 +557,8 @@ const styles = StyleSheet.create({
   nickname: { fontSize: 15, fontWeight: "900", color: colors.text, letterSpacing: -0.3 },
   realName: { fontSize: 11, color: colors.textSecondary, marginTop: 2, fontWeight: "600" },
   iconBtn: {
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
     backgroundColor: colors.card,
     borderWidth: 2,
     borderColor: colors.border,
@@ -405,7 +595,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 40 },
+  empty: { alignItems: "center", paddingTop: 20 },
   emptyBlock: {
     backgroundColor: colors.peach,
     borderWidth: 2,

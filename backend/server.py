@@ -95,6 +95,10 @@ class FriendUpdate(BaseModel):
     nickname: str
 
 
+class FriendAccept(BaseModel):
+    nickname: Optional[str] = None
+
+
 class TodoResponse(BaseModel):
     id: str
     title: str
@@ -661,12 +665,11 @@ async def unread_count(current_user: dict = Depends(get_current_user)):
 
 @api_router.get("/badges")
 async def get_badges(current_user: dict = Depends(get_current_user)):
-    """Returns unread notification count and new-shared count since last view."""
+    """Returns unread notification count, new-shared count, and pending friend requests."""
     unread = await db.notifications.count_documents(
         {"user_id": current_user["id"], "read": False}
     )
     last_seen = current_user.get("last_seen_shared_at") or "1970-01-01T00:00:00+00:00"
-    # Count shared todos where this user was shared after last_seen
     shared_todos = await db.todos.find(
         {"shared_with.user_id": current_user["id"]},
         {"_id": 0, "shared_with": 1}
@@ -679,7 +682,12 @@ async def get_badges(current_user: dict = Depends(get_current_user)):
                 if sw_at > last_seen:
                     shared_new += 1
                 break
-    return {"notifications_unread": unread, "shared_new": shared_new}
+    friend_requests_pending = await db.friend_requests.count_documents({"to_user_id": current_user["id"]})
+    return {
+        "notifications_unread": unread,
+        "shared_new": shared_new,
+        "friend_requests_pending": friend_requests_pending,
+    }
 
 
 @api_router.post("/badges/mark-shared-seen")
@@ -716,12 +724,14 @@ async def list_friends(current_user: dict = Depends(get_current_user)):
 
 @api_router.post("/friends")
 async def add_friend(data: FriendAdd, current_user: dict = Depends(get_current_user)):
+    """Send a friend request (not immediate add)."""
     target = await db.users.find_one({"user_code": data.user_code.upper().strip()}, {"_id": 0})
     if not target:
         raise HTTPException(status_code=404, detail="User code not found")
     if target["id"] == current_user["id"]:
         raise HTTPException(status_code=400, detail="Cannot add yourself as friend")
 
+    # Already friends?
     existing = await db.friends.find_one({
         "owner_id": current_user["id"],
         "friend_user_id": target["id"],
@@ -729,24 +739,180 @@ async def add_friend(data: FriendAdd, current_user: dict = Depends(get_current_u
     if existing:
         raise HTTPException(status_code=400, detail="Already in your friends list")
 
-    nickname = (data.nickname or target["name"]).strip() or target["name"]
-    friend_doc = {
+    # Pending request already exists (sent by me)?
+    pending = await db.friend_requests.find_one({
+        "from_user_id": current_user["id"],
+        "to_user_id": target["id"],
+    })
+    if pending:
+        raise HTTPException(status_code=400, detail="Friend request already sent")
+
+    # Reverse request exists (they sent to me)? Auto-accept it.
+    reverse = await db.friend_requests.find_one({
+        "from_user_id": target["id"],
+        "to_user_id": current_user["id"],
+    })
+    if reverse:
+        # Auto-accept: both become friends
+        await _create_mutual_friendship(
+            user_a=current_user, user_b=target,
+            nickname_a_for_b=(data.nickname or target["name"]).strip() or target["name"],
+            nickname_b_for_a=reverse.get("from_nickname") or current_user["name"],
+        )
+        await db.friend_requests.delete_one({"id": reverse["id"]})
+        await _notify_request_accepted(target, current_user)
+        return {"status": "accepted", "message": "Friend request auto-accepted (they already sent you one)"}
+
+    suggested = (data.nickname or "").strip() or None
+    req_doc = {
         "id": str(uuid.uuid4()),
-        "owner_id": current_user["id"],
-        "friend_user_id": target["id"],
-        "nickname": nickname,
+        "from_user_id": current_user["id"],
+        "to_user_id": target["id"],
+        "from_nickname": suggested,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.friends.insert_one(friend_doc)
-    return {
-        "id": friend_doc["id"],
-        "friend_user_id": target["id"],
-        "nickname": nickname,
-        "name": target["name"],
-        "email": target["email"],
-        "user_code": target["user_code"],
-        "created_at": friend_doc["created_at"],
-    }
+    await db.friend_requests.insert_one(req_doc)
+
+    # Notify recipient
+    if target.get("push_token"):
+        await send_expo_push(
+            [target["push_token"]],
+            "👋 New Friend Request",
+            f"{current_user['name']} wants to add you as a friend",
+            {"type": "friend_request"},
+        )
+    await db.notifications.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": target["id"],
+        "todo_id": None,
+        "type": "friend_request",
+        "title": "New Friend Request",
+        "body": f"{current_user['name']} wants to add you as a friend",
+        "read": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    return {"status": "pending", "request_id": req_doc["id"]}
+
+
+async def _create_mutual_friendship(user_a: dict, user_b: dict, nickname_a_for_b: str, nickname_b_for_a: str):
+    now = datetime.now(timezone.utc).isoformat()
+    docs = [
+        {
+            "id": str(uuid.uuid4()),
+            "owner_id": user_a["id"],
+            "friend_user_id": user_b["id"],
+            "nickname": nickname_a_for_b,
+            "created_at": now,
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "owner_id": user_b["id"],
+            "friend_user_id": user_a["id"],
+            "nickname": nickname_b_for_a,
+            "created_at": now,
+        },
+    ]
+    await db.friends.insert_many(docs)
+
+
+async def _notify_request_accepted(sender: dict, accepter: dict):
+    if sender.get("push_token"):
+        await send_expo_push(
+            [sender["push_token"]],
+            "🎉 Friend Request Accepted",
+            f"{accepter['name']} accepted your friend request",
+            {"type": "friend_accepted"},
+        )
+    await db.notifications.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": sender["id"],
+        "todo_id": None,
+        "type": "friend_accepted",
+        "title": "Friend Request Accepted",
+        "body": f"{accepter['name']} accepted your friend request",
+        "read": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+
+@api_router.get("/friend-requests")
+async def list_friend_requests(current_user: dict = Depends(get_current_user)):
+    incoming_docs = await db.friend_requests.find(
+        {"to_user_id": current_user["id"]}, {"_id": 0}
+    ).sort("created_at", -1).to_list(500)
+    outgoing_docs = await db.friend_requests.find(
+        {"from_user_id": current_user["id"]}, {"_id": 0}
+    ).sort("created_at", -1).to_list(500)
+
+    incoming = []
+    for r in incoming_docs:
+        u = await db.users.find_one({"id": r["from_user_id"]}, {"_id": 0, "name": 1, "user_code": 1})
+        if u:
+            incoming.append({
+                "id": r["id"],
+                "from_user_id": r["from_user_id"],
+                "from_name": u["name"],
+                "from_user_code": u["user_code"],
+                "from_nickname": r.get("from_nickname"),
+                "created_at": r["created_at"],
+            })
+
+    outgoing = []
+    for r in outgoing_docs:
+        u = await db.users.find_one({"id": r["to_user_id"]}, {"_id": 0, "name": 1, "user_code": 1})
+        if u:
+            outgoing.append({
+                "id": r["id"],
+                "to_user_id": r["to_user_id"],
+                "to_name": u["name"],
+                "to_user_code": u["user_code"],
+                "created_at": r["created_at"],
+            })
+
+    return {"incoming": incoming, "outgoing": outgoing}
+
+
+@api_router.post("/friend-requests/{request_id}/accept")
+async def accept_friend_request(request_id: str, data: FriendAccept, current_user: dict = Depends(get_current_user)):
+    req = await db.friend_requests.find_one({"id": request_id, "to_user_id": current_user["id"]}, {"_id": 0})
+    if not req:
+        raise HTTPException(status_code=404, detail="Friend request not found")
+
+    sender = await db.users.find_one({"id": req["from_user_id"]}, {"_id": 0})
+    if not sender:
+        await db.friend_requests.delete_one({"id": request_id})
+        raise HTTPException(status_code=404, detail="Sender no longer exists")
+
+    nickname_for_sender = (data.nickname or "").strip() or sender["name"]
+    nickname_for_me = req.get("from_nickname") or current_user["name"]
+
+    await _create_mutual_friendship(
+        user_a=current_user, user_b=sender,
+        nickname_a_for_b=nickname_for_sender,
+        nickname_b_for_a=nickname_for_me,
+    )
+    await db.friend_requests.delete_one({"id": request_id})
+    await _notify_request_accepted(sender, current_user)
+
+    return {"success": True}
+
+
+@api_router.post("/friend-requests/{request_id}/decline")
+async def decline_friend_request(request_id: str, current_user: dict = Depends(get_current_user)):
+    req = await db.friend_requests.find_one({"id": request_id, "to_user_id": current_user["id"]})
+    if not req:
+        raise HTTPException(status_code=404, detail="Friend request not found")
+    await db.friend_requests.delete_one({"id": request_id})
+    return {"success": True}
+
+
+@api_router.delete("/friend-requests/{request_id}")
+async def cancel_friend_request(request_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.friend_requests.delete_one({"id": request_id, "from_user_id": current_user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Friend request not found")
+    return {"success": True}
 
 
 @api_router.put("/friends/{friend_id}")
@@ -764,9 +930,18 @@ async def update_friend(friend_id: str, data: FriendUpdate, current_user: dict =
 
 @api_router.delete("/friends/{friend_id}")
 async def remove_friend(friend_id: str, current_user: dict = Depends(get_current_user)):
-    result = await db.friends.delete_one({"id": friend_id, "owner_id": current_user["id"]})
-    if result.deleted_count == 0:
+    """Removes the friendship for BOTH users (bidirectional)."""
+    me_record = await db.friends.find_one({"id": friend_id, "owner_id": current_user["id"]})
+    if not me_record:
         raise HTTPException(status_code=404, detail="Friend not found")
+    other_user_id = me_record["friend_user_id"]
+    # Delete both directional records
+    await db.friends.delete_many({
+        "$or": [
+            {"owner_id": current_user["id"], "friend_user_id": other_user_id},
+            {"owner_id": other_user_id, "friend_user_id": current_user["id"]},
+        ]
+    })
     return {"success": True}
 
 

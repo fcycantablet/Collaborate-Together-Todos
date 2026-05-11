@@ -61,4 +61,12 @@ export const api = {
   updateFriend: (id: string, nickname: string) =>
     request(`/friends/${id}`, { method: "PUT", body: JSON.stringify({ nickname }) }),
   removeFriend: (id: string) => request(`/friends/${id}`, { method: "DELETE" }),
+
+  listFriendRequests: () => request("/friend-requests"),
+  acceptFriendRequest: (id: string, nickname?: string) =>
+    request(`/friend-requests/${id}/accept`, { method: "POST", body: JSON.stringify({ nickname }) }),
+  declineFriendRequest: (id: string) =>
+    request(`/friend-requests/${id}/decline`, { method: "POST" }),
+  cancelFriendRequest: (id: string) =>
+    request(`/friend-requests/${id}`, { method: "DELETE" }),
 };

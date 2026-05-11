@@ -149,5 +149,3 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 20, fontWeight: "900", color: colors.text, letterSpacing: -0.5, textAlign: "center" },
   emptyDesc: { fontSize: 13, color: colors.textSecondary, marginTop: 10, textAlign: "center", fontWeight: "600" },
 });
-: 10, textAlign: "center", fontWeight: "600" },
-});

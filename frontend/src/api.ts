@@ -47,6 +47,8 @@ export const api = {
   setReminder: (id: string, minutes: number) =>
     request(`/todos/${id}/remind`, { method: "POST", body: JSON.stringify({ minutes }) }),
   clearReminder: (id: string) => request(`/todos/${id}/remind`, { method: "DELETE" }),
+  setProof: (id: string, images: string[]) =>
+    request(`/todos/${id}/proof`, { method: "POST", body: JSON.stringify({ images }) }),
 
   getNotifications: () => request("/notifications"),
   markAllRead: () => request("/notifications/mark-all-read", { method: "POST" }),

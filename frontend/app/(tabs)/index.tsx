@@ -50,9 +50,33 @@ export default function MyTodos() {
     try {
       const updated = await api.toggleComplete(id);
       setTodos((prev) => prev.map((t) => (t.id === id ? updated : t)));
+      // Prompt for proof on transition to complete
+      if (updated.completed) {
+        const ask = () => router.push({ pathname: "/add-proof", params: { todoId: id, title: updated.title } });
+        if (Platform.OS === "web") {
+          if (typeof window !== "undefined" && window.confirm("Want to add a photo to show what's done?")) ask();
+        } else {
+          Alert.alert("Nice work! 🎉", "Want to add a photo to show what's done?", [
+            { text: "Skip", style: "cancel" },
+            { text: "Add Photo", onPress: ask },
+          ]);
+        }
+      }
     } catch (e: any) {
       Alert.alert("Error", e.message);
     }
+  };
+
+  const openProof = (item: Todo) => {
+    const mine = (item.completion_proofs || []).find((p) => p.user_id === user?.id);
+    router.push({
+      pathname: "/add-proof",
+      params: {
+        todoId: item.id,
+        title: item.title,
+        existing: mine ? JSON.stringify(mine.images) : "[]",
+      },
+    });
   };
 
   const clearReminder = async (id: string) => {
@@ -122,6 +146,7 @@ export default function MyTodos() {
             onToggleComplete={() => toggleComplete(item.id)}
             onDelete={() => deleteTodo(item.id)}
             onClearReminder={() => clearReminder(item.id)}
+            onAddProof={() => openProof(item)}
             onSetReminder={() =>
               router.push({ pathname: "/set-reminder", params: { todoId: item.id, title: item.title } })
             }

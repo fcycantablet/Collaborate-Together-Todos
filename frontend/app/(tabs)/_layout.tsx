@@ -103,7 +103,13 @@ function InnerTabs() {
         options={{
           title: "PROFILE",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "person" : "person-outline"} size={24} color={color} />
+            <IconWithDot
+              name={focused ? "person" : "person-outline"}
+              color={color}
+              showDot={(badges.friend_requests_pending || 0) > 0}
+              count={badges.friend_requests_pending}
+              testID="profile-badge-dot"
+            />
           ),
           tabBarButtonTestID: "nav-profile",
         }}

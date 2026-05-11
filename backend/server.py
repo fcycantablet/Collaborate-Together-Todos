@@ -86,6 +86,10 @@ class ReminderRequest(BaseModel):
     minutes: int  # total minutes from now
 
 
+class ProofRequest(BaseModel):
+    images: List[str]  # base64 strings, max 10
+
+
 class FriendAdd(BaseModel):
     user_code: str
     nickname: Optional[str] = None
@@ -109,11 +113,12 @@ class TodoResponse(BaseModel):
     attachment: Optional[str]
     owner_id: str
     owner_name: str
-    shared_with: List[dict]  # [{user_id, name, completed}]
+    shared_with: List[dict]
     completed: bool
     created_at: str
     updated_at: Optional[str] = None
-    my_reminder_at: Optional[str] = None  # for current user only
+    my_reminder_at: Optional[str] = None
+    completion_proofs: List[dict] = []  # [{user_id, user_name, images, updated_at}]
 
 
 # ============ HELPERS ============
@@ -183,6 +188,17 @@ async def todo_to_response(todo: dict, current_user_id: Optional[str] = None) ->
                 my_reminder_at = r.get("remind_at")
                 break
 
+    # Enrich proofs with user names
+    proofs = []
+    for p in todo.get("completion_proofs", []):
+        u = await db.users.find_one({"id": p["user_id"]}, {"_id": 0, "name": 1})
+        proofs.append({
+            "user_id": p["user_id"],
+            "user_name": u["name"] if u else "Unknown",
+            "images": p.get("images", []),
+            "updated_at": p.get("updated_at"),
+        })
+
     return TodoResponse(
         id=todo["id"],
         title=todo["title"],
@@ -198,6 +214,7 @@ async def todo_to_response(todo: dict, current_user_id: Optional[str] = None) ->
         created_at=todo["created_at"],
         updated_at=todo.get("updated_at"),
         my_reminder_at=my_reminder_at,
+        completion_proofs=proofs,
     )
 
 
@@ -377,13 +394,30 @@ async def get_shared_with_me(current_user: dict = Depends(get_current_user)):
 
 @api_router.delete("/todos/{todo_id}")
 async def delete_todo(todo_id: str, current_user: dict = Depends(get_current_user)):
-    result = await db.todos.delete_one({"id": todo_id, "owner_id": current_user["id"]})
-    if result.deleted_count == 0:
+    """Owner-only hard delete. Removes the todo, all notifications, all scheduled jobs, and all proof images."""
+    todo = await db.todos.find_one({"id": todo_id, "owner_id": current_user["id"]}, {"_id": 0})
+    if not todo:
         raise HTTPException(status_code=404, detail="Todo not found")
-    # Remove scheduled job
-    job_id = f"todo_{todo_id}"
-    if scheduler.get_job(job_id):
-        scheduler.remove_job(job_id)
+
+    # Remove main scheduled notification job
+    main_job_id = f"todo_{todo_id}"
+    if scheduler.get_job(main_job_id):
+        scheduler.remove_job(main_job_id)
+
+    # Remove every personal reminder job for this todo (one per user)
+    for r in todo.get("personal_reminders", []):
+        uid = r.get("user_id")
+        if uid:
+            rjob = f"reminder_{todo_id}_{uid}"
+            if scheduler.get_job(rjob):
+                scheduler.remove_job(rjob)
+
+    # Delete all in-app notifications tied to this todo
+    await db.notifications.delete_many({"todo_id": todo_id})
+
+    # Hard delete the todo doc itself (proofs/images live inside it, gone with it)
+    await db.todos.delete_one({"id": todo_id})
+
     return {"success": True}
 
 
@@ -530,6 +564,39 @@ async def share_todo(todo_id: str, data: TodoShareRequest, current_user: dict = 
 
     updated = await db.todos.find_one({"id": todo_id}, {"_id": 0})
     return await todo_to_response(updated, current_user["id"])
+
+
+# ============ COMPLETION PROOFS ============
+@api_router.post("/todos/{todo_id}/proof", response_model=TodoResponse)
+async def add_completion_proof(todo_id: str, data: ProofRequest, current_user: dict = Depends(get_current_user)):
+    """Replace current user's proof images for a todo. Max 10 per user. Owner or shared user."""
+    if len(data.images) > 10:
+        raise HTTPException(status_code=400, detail="Maximum 10 images per user")
+
+    todo = await db.todos.find_one({"id": todo_id}, {"_id": 0})
+    if not todo:
+        raise HTTPException(status_code=404, detail="Todo not found")
+
+    uid = current_user["id"]
+    is_owner = todo["owner_id"] == uid
+    is_shared = any(sw["user_id"] == uid for sw in todo.get("shared_with", []))
+    if not (is_owner or is_shared):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    now = datetime.now(timezone.utc).isoformat()
+    # Remove existing entry for this user
+    await db.todos.update_one(
+        {"id": todo_id},
+        {"$pull": {"completion_proofs": {"user_id": uid}}}
+    )
+    if data.images:
+        await db.todos.update_one(
+            {"id": todo_id},
+            {"$push": {"completion_proofs": {"user_id": uid, "images": data.images, "updated_at": now}}}
+        )
+
+    updated = await db.todos.find_one({"id": todo_id}, {"_id": 0})
+    return await todo_to_response(updated, uid)
 
 
 # ============ PERSONAL REMINDERS ============

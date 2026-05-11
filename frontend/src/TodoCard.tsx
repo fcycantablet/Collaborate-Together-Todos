@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Image } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Image, ScrollView } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, shadows, priorityColors, categoryColors } from "./theme";
 import { format, parseISO, formatDistanceToNow } from "date-fns";
@@ -19,6 +19,7 @@ export type Todo = {
   created_at: string;
   updated_at?: string | null;
   my_reminder_at?: string | null;
+  completion_proofs?: { user_id: string; user_name: string; images: string[]; updated_at?: string }[];
 };
 
 type Props = {
@@ -31,6 +32,7 @@ type Props = {
   onEdit?: () => void;
   onSetReminder?: () => void;
   onClearReminder?: () => void;
+  onAddProof?: () => void;
 };
 
 export default function TodoCard({
@@ -43,6 +45,7 @@ export default function TodoCard({
   onEdit,
   onSetReminder,
   onClearReminder,
+  onAddProof,
 }: Props) {
   let isCompleted = false;
   if (isOwner) {
@@ -150,6 +153,27 @@ export default function TodoCard({
         </View>
       ) : null}
 
+      {todo.completion_proofs && todo.completion_proofs.length > 0 && (
+        <View style={styles.proofSection} testID={`todo-proofs-${todo.id}`}>
+          <Text style={styles.proofLabel}>📸 PROOF OF DONE</Text>
+          {todo.completion_proofs.map((p) => (
+            <View key={p.user_id} style={styles.proofRow}>
+              <Text style={styles.proofUser}>{p.user_name}:</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
+                {p.images.map((img, i) => (
+                  <Image
+                    key={i}
+                    source={{ uri: img }}
+                    style={styles.proofImg}
+                    resizeMode="cover"
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          ))}
+        </View>
+      )}
+
       {isOwner && todo.shared_with.length > 0 && (
         <View style={styles.sharedList}>
           <Text style={styles.sharedLabel}>SHARED WITH:</Text>
@@ -159,6 +183,22 @@ export default function TodoCard({
             </Text>
           ))}
         </View>
+      )}
+
+      {isCompleted && onAddProof && (
+        <TouchableOpacity
+          testID={`todo-add-proof-${todo.id}`}
+          style={styles.addProofBtn}
+          onPress={onAddProof}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="camera" size={16} color={colors.text} />
+          <Text style={styles.addProofText}>
+            {(todo.completion_proofs || []).some((p) => p.user_id === currentUserId)
+              ? "EDIT PROOF PHOTOS"
+              : "ADD PROOF PHOTOS"}
+          </Text>
+        </TouchableOpacity>
       )}
 
       {isOwner && (

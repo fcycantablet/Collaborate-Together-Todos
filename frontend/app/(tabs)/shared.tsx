@@ -1,13 +1,5 @@
 import React, { useState, useCallback } from "react";
-import {
-  View,
-  Text,
-  FlatList,
-  StyleSheet,
-  RefreshControl,
-  Alert,
-  ActivityIndicator,
-} from "react-native";
+import { View, Text, FlatList, StyleSheet, RefreshControl, Alert, ActivityIndicator, Platform } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../src/api";
@@ -50,9 +42,34 @@ export default function SharedWithMe() {
     try {
       const updated = await api.toggleComplete(id);
       setTodos((prev) => prev.map((t) => (t.id === id ? updated : t)));
+      // Prompt recipient to add proof
+      const meCompleted = updated.shared_with.find((s) => s.user_id === user?.id)?.completed;
+      if (meCompleted) {
+        const ask = () => router.push({ pathname: "/add-proof", params: { todoId: id, title: updated.title } });
+        if (Platform.OS === "web") {
+          if (typeof window !== "undefined" && window.confirm("Want to add a photo to show what's done?")) ask();
+        } else {
+          Alert.alert("Nice work! 🎉", "Want to add a photo to show what's done?", [
+            { text: "Skip", style: "cancel" },
+            { text: "Add Photo", onPress: ask },
+          ]);
+        }
+      }
     } catch (e: any) {
       Alert.alert("Error", e.message);
     }
+  };
+
+  const openProof = (item: Todo) => {
+    const mine = (item.completion_proofs || []).find((p) => p.user_id === user?.id);
+    router.push({
+      pathname: "/add-proof",
+      params: {
+        todoId: item.id,
+        title: item.title,
+        existing: mine ? JSON.stringify(mine.images) : "[]",
+      },
+    });
   };
 
   const clearReminder = async (id: string) => {
@@ -131,4 +148,6 @@ const styles = StyleSheet.create({
   emptyEmoji: { fontSize: 48, marginBottom: 12 },
   emptyTitle: { fontSize: 20, fontWeight: "900", color: colors.text, letterSpacing: -0.5, textAlign: "center" },
   emptyDesc: { fontSize: 13, color: colors.textSecondary, marginTop: 10, textAlign: "center", fontWeight: "600" },
+});
+: 10, textAlign: "center", fontWeight: "600" },
 });

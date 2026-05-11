@@ -6,6 +6,7 @@ import { useAuth } from "./auth";
 type Badges = {
   notifications_unread: number;
   shared_new: number;
+  friend_requests_pending: number;
 };
 
 type BadgesCtx = {
@@ -19,7 +20,7 @@ const Ctx = createContext<BadgesCtx | undefined>(undefined);
 
 export function BadgesProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  const [badges, setBadges] = useState<Badges>({ notifications_unread: 0, shared_new: 0 });
+  const [badges, setBadges] = useState<Badges>({ notifications_unread: 0, shared_new: 0, friend_requests_pending: 0 });
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refresh = useCallback(async () => {
@@ -29,6 +30,7 @@ export function BadgesProvider({ children }: { children: React.ReactNode }) {
       setBadges({
         notifications_unread: data.notifications_unread || 0,
         shared_new: data.shared_new || 0,
+        friend_requests_pending: data.friend_requests_pending || 0,
       });
     } catch {}
   }, [user]);
@@ -49,7 +51,7 @@ export function BadgesProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!user) {
-      setBadges({ notifications_unread: 0, shared_new: 0 });
+      setBadges({ notifications_unread: 0, shared_new: 0, friend_requests_pending: 0 });
       if (intervalRef.current) clearInterval(intervalRef.current);
       return;
     }

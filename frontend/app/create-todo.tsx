@@ -12,7 +12,7 @@ import {
   Alert,
   Image,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -25,12 +25,33 @@ const CATEGORIES = ["Work", "Personal", "Shopping", "Health", "Other"] as const;
 
 export default function CreateTodo() {
   const router = useRouter();
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState<string>("medium");
-  const [category, setCategory] = useState<string>("Other");
-  const [attachment, setAttachment] = useState<string | null>(null);
-  const [date, setDate] = useState(new Date(Date.now() + 60 * 60 * 1000));
+  const params = useLocalSearchParams<{
+    todoId?: string;
+    title?: string;
+    description?: string;
+    scheduled_at?: string;
+    priority?: string;
+    category?: string;
+    attachment?: string;
+  }>();
+  const editId = params.todoId as string | undefined;
+  const isEdit = !!editId;
+
+  const [title, setTitle] = useState((params.title as string) || "");
+  const [description, setDescription] = useState((params.description as string) || "");
+  const [priority, setPriority] = useState<string>((params.priority as string) || "medium");
+  const [category, setCategory] = useState<string>((params.category as string) || "Other");
+  const [attachment, setAttachment] = useState<string | null>(
+    (params.attachment as string) && (params.attachment as string) !== "null" ? (params.attachment as string) : null
+  );
+  const [date, setDate] = useState(() => {
+    if (params.scheduled_at && typeof params.scheduled_at === "string") {
+      try {
+        return new Date(params.scheduled_at);
+      } catch {}
+    }
+    return new Date(Date.now() + 60 * 60 * 1000);
+  });
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -81,17 +102,22 @@ export default function CreateTodo() {
     setError("");
     setSaving(true);
     try {
-      await api.createTodo({
+      const payload = {
         title: title.trim(),
         description: description.trim(),
         scheduled_at: date.toISOString(),
         priority,
         category,
         attachment,
-      });
+      };
+      if (isEdit && editId) {
+        await api.updateTodo(editId, payload);
+      } else {
+        await api.createTodo(payload);
+      }
       router.back();
     } catch (e: any) {
-      setError(e.message || "Failed to create todo");
+      setError(e.message || (isEdit ? "Failed to update todo" : "Failed to create todo"));
     } finally {
       setSaving(false);
     }
@@ -198,7 +224,7 @@ export default function CreateTodo() {
           <TouchableOpacity testID="close-create-todo" onPress={() => router.back()} style={styles.closeBtn}>
             <Ionicons name="close" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>NEW TODO</Text>
+          <Text style={styles.headerTitle}>{isEdit ? "EDIT TODO" : "NEW TODO"}</Text>
           <View style={{ width: 40 }} />
         </View>
 
@@ -300,7 +326,7 @@ export default function CreateTodo() {
             {saving ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.saveBtnText}>CREATE TODO</Text>
+              <Text style={styles.saveBtnText}>{isEdit ? "SAVE CHANGES" : "CREATE TODO"}</Text>
             )}
           </TouchableOpacity>
         </ScrollView>

@@ -39,6 +39,7 @@ export const api = {
   getMyTodos: () => request("/todos"),
   getSharedTodos: () => request("/todos/shared"),
   createTodo: (payload: any) => request("/todos", { method: "POST", body: JSON.stringify(payload) }),
+  updateTodo: (id: string, payload: any) => request(`/todos/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteTodo: (id: string) => request(`/todos/${id}`, { method: "DELETE" }),
   toggleComplete: (id: string) => request(`/todos/${id}/complete`, { method: "PATCH" }),
   shareTodo: (id: string, user_code: string) =>

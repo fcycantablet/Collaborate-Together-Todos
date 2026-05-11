@@ -112,6 +112,20 @@ export default function MyTodos() {
             currentUserId={user?.id || ""}
             onToggleComplete={() => toggleComplete(item.id)}
             onDelete={() => deleteTodo(item.id)}
+            onEdit={() =>
+              router.push({
+                pathname: "/create-todo",
+                params: {
+                  todoId: item.id,
+                  title: item.title,
+                  description: item.description,
+                  scheduled_at: item.scheduled_at,
+                  priority: item.priority,
+                  category: item.category,
+                  attachment: item.attachment || "",
+                },
+              })
+            }
             onShare={() => router.push({ pathname: "/share-todo", params: { todoId: item.id, title: item.title } })}
           />
         )}

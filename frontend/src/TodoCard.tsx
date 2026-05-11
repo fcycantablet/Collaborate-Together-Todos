@@ -2,7 +2,7 @@ import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, shadows, priorityColors, categoryColors } from "./theme";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, formatDistanceToNow } from "date-fns";
 
 export type Todo = {
   id: string;
@@ -17,6 +17,7 @@ export type Todo = {
   shared_with: { user_id: string; name: string; completed: boolean }[];
   completed: boolean;
   created_at: string;
+  updated_at?: string | null;
 };
 
 type Props = {
@@ -26,9 +27,10 @@ type Props = {
   onToggleComplete: () => void;
   onDelete?: () => void;
   onShare?: () => void;
+  onEdit?: () => void;
 };
 
-export default function TodoCard({ todo, isOwner, currentUserId, onToggleComplete, onDelete, onShare }: Props) {
+export default function TodoCard({ todo, isOwner, currentUserId, onToggleComplete, onDelete, onShare, onEdit }: Props) {
   let isCompleted = false;
   if (isOwner) {
     isCompleted = todo.completed;
@@ -44,11 +46,25 @@ export default function TodoCard({ todo, isOwner, currentUserId, onToggleComplet
     formattedDate = todo.scheduled_at;
   }
 
+  let editedAgo = "";
+  if (todo.updated_at) {
+    try {
+      editedAgo = `edited ${formatDistanceToNow(parseISO(todo.updated_at), { addSuffix: true })}`;
+    } catch {
+      editedAgo = "";
+    }
+  }
+
   return (
     <View
       style={[styles.card, isCompleted && styles.cardCompleted]}
       testID={`todo-card-${todo.id}`}
     >
+      {editedAgo ? (
+        <Text style={styles.editedTag} testID={`todo-edited-${todo.id}`}>
+          {editedAgo}
+        </Text>
+      ) : null}
       <View style={styles.row}>
         <TouchableOpacity
           testID={`todo-checkbox-${todo.id}`}
@@ -110,6 +126,17 @@ export default function TodoCard({ todo, isOwner, currentUserId, onToggleComplet
 
       {isOwner && (
         <View style={styles.actions}>
+          {onEdit && (
+            <TouchableOpacity
+              testID={`todo-edit-${todo.id}`}
+              style={styles.actionBtn}
+              onPress={onEdit}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="create-outline" size={16} color={colors.text} />
+              <Text style={styles.actionText}>EDIT</Text>
+            </TouchableOpacity>
+          )}
           {onShare && (
             <TouchableOpacity
               testID={`todo-share-${todo.id}`}
@@ -146,6 +173,17 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
     ...shadows.brutal,
+  },
+  editedTag: {
+    position: "absolute",
+    top: 6,
+    right: 8,
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    color: colors.textMuted,
+    fontStyle: "italic",
+    zIndex: 1,
   },
   cardCompleted: {
     backgroundColor: colors.bg,

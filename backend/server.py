@@ -95,6 +95,7 @@ class TodoResponse(BaseModel):
     shared_with: List[dict]  # [{user_id, name, completed}]
     completed: bool
     created_at: str
+    updated_at: Optional[str] = None
 
 
 # ============ HELPERS ============
@@ -169,6 +170,7 @@ async def todo_to_response(todo: dict) -> TodoResponse:
         shared_with=shared_users,
         completed=todo.get("completed", False),
         created_at=todo["created_at"],
+        updated_at=todo.get("updated_at"),
     )
 
 
@@ -356,6 +358,59 @@ async def delete_todo(todo_id: str, current_user: dict = Depends(get_current_use
     if scheduler.get_job(job_id):
         scheduler.remove_job(job_id)
     return {"success": True}
+
+
+@api_router.put("/todos/{todo_id}", response_model=TodoResponse)
+async def update_todo(todo_id: str, data: TodoCreate, current_user: dict = Depends(get_current_user)):
+    """Only the owner can edit a todo. Updates fields and reschedules notification."""
+    todo = await db.todos.find_one({"id": todo_id, "owner_id": current_user["id"]}, {"_id": 0})
+    if not todo:
+        raise HTTPException(status_code=404, detail="Todo not found or not yours")
+
+    now = datetime.now(timezone.utc).isoformat()
+    updates = {
+        "title": data.title,
+        "description": data.description or "",
+        "scheduled_at": data.scheduled_at,
+        "priority": data.priority,
+        "category": data.category,
+        "attachment": data.attachment,
+        "updated_at": now,
+    }
+    await db.todos.update_one({"id": todo_id}, {"$set": updates})
+
+    # Reschedule notification
+    schedule_todo_notification(todo_id, data.scheduled_at)
+
+    # Notify shared users about the edit
+    shared_user_ids = [sw["user_id"] for sw in todo.get("shared_with", [])]
+    if shared_user_ids:
+        users = await db.users.find({"id": {"$in": shared_user_ids}}, {"_id": 0}).to_list(100)
+        push_tokens = [u.get("push_token") for u in users if u.get("push_token")]
+        if push_tokens:
+            await send_expo_push(
+                push_tokens,
+                "✏️ Shared Task Updated",
+                f"{current_user['name']} updated: {data.title}",
+                {"todo_id": todo_id},
+            )
+        notifs = [
+            {
+                "id": str(uuid.uuid4()),
+                "user_id": uid,
+                "todo_id": todo_id,
+                "type": "updated",
+                "title": "Shared Task Updated",
+                "body": f"{current_user['name']} updated: {data.title}",
+                "read": False,
+                "created_at": now,
+            }
+            for uid in shared_user_ids
+        ]
+        await db.notifications.insert_many(notifs)
+
+    updated = await db.todos.find_one({"id": todo_id}, {"_id": 0})
+    return await todo_to_response(updated)
 
 
 @api_router.patch("/todos/{todo_id}/complete")

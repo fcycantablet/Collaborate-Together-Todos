@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "TodoShare",
-    "slug": "todoshare",
+    "name": "Collaborate Together",
+    "slug": "collaborate-together",
     "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.todoshare.app",
+      "bundleIdentifier": "app.emergent.remindtogether6d1d10023",
       "buildNumber": "3",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Attach images to your to-dos",
@@ -19,7 +19,7 @@
       }
     },
     "android": {
-      "package": "com.todoshare.app",
+      "package": "app.emergent.remindtogether6d1d10023",
       "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",

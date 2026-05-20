@@ -595,6 +595,30 @@ async def add_completion_proof(todo_id: str, data: ProofRequest, current_user: d
             {"$push": {"completion_proofs": {"user_id": uid, "images": data.images, "updated_at": now}}}
         )
 
+    # Notify the owner (if proof added by a shared user)
+    if data.images and not is_owner:
+        owner = await db.users.find_one({"id": todo["owner_id"]}, {"_id": 0})
+        if owner:
+            count = len(data.images)
+            body = f"{current_user['name']} added {count} photo{'s' if count != 1 else ''} for: {todo['title']}"
+            if owner.get("push_token"):
+                await send_expo_push(
+                    [owner["push_token"]],
+                    "📸 Proof Added",
+                    body,
+                    {"todo_id": todo_id},
+                )
+            await db.notifications.insert_one({
+                "id": str(uuid.uuid4()),
+                "user_id": owner["id"],
+                "todo_id": todo_id,
+                "type": "proof_added",
+                "title": "Proof Added",
+                "body": body,
+                "read": False,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+
     updated = await db.todos.find_one({"id": todo_id}, {"_id": 0})
     return await todo_to_response(updated, uid)
 

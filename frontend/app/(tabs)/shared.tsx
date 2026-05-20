@@ -2,6 +2,7 @@ import React, { useState, useCallback } from "react";
 import { View, Text, FlatList, StyleSheet, RefreshControl, Alert, ActivityIndicator, Platform } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
+import * as ImagePicker from "expo-image-picker";
 import { api } from "../../src/api";
 import { useAuth } from "../../src/auth";
 import { useBadges } from "../../src/badges";
@@ -38,21 +39,87 @@ export default function SharedWithMe() {
     setRefreshing(false);
   };
 
+  const captureProofAndUpload = async (todoId: string, existingProofImages: string[] = []) => {
+    try {
+      // On web, fallback to file picker / gallery (no native camera)
+      if (Platform.OS === "web") {
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          quality: 0.4,
+          base64: true,
+          allowsEditing: false,
+        });
+        if (result.canceled || !result.assets?.[0]) return;
+        const a = result.assets[0];
+        const img = a.base64 ? `data:image/jpeg;base64,${a.base64}` : a.uri;
+        const next = [...existingProofImages, img].slice(0, 10);
+        await api.setProof(todoId, next);
+        await load();
+        Alert.alert("Uploaded ✅", "Your proof photo was added.");
+        return;
+      }
+
+      // Native: request camera permission, then launch camera
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert("Camera Permission Needed", "Please allow camera access in Settings to add proof photos.");
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.4,
+        base64: true,
+        allowsEditing: false,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      const img = asset.base64
+        ? `data:image/jpeg;base64,${asset.base64}`
+        : asset.uri;
+      const next = [...existingProofImages, img].slice(0, 10);
+      await api.setProof(todoId, next);
+      await load();
+      Alert.alert("Uploaded ✅", "Your proof photo was added. The owner has been notified.");
+    } catch (e: any) {
+      Alert.alert("Upload failed", e.message || "Could not upload proof photo");
+    }
+  };
+
   const toggleComplete = async (id: string) => {
     try {
       const updated = await api.toggleComplete(id);
       setTodos((prev) => prev.map((t) => (t.id === id ? updated : t)));
-      // Prompt recipient to add proof
+      // Prompt recipient to add proof IMMEDIATELY via CAMERA
       const meCompleted = updated.shared_with.find((s) => s.user_id === user?.id)?.completed;
       if (meCompleted) {
-        const ask = () => router.push({ pathname: "/add-proof", params: { todoId: id, title: updated.title } });
+        const myProof = (updated.completion_proofs || []).find((p: any) => p.user_id === user?.id);
+        const existingImgs: string[] = myProof?.images || [];
+        const takePhoto = () => captureProofAndUpload(id, existingImgs);
+        const goToGallery = () =>
+          router.push({
+            pathname: "/add-proof",
+            params: {
+              todoId: id,
+              title: updated.title,
+              existing: JSON.stringify(existingImgs),
+            },
+          });
+
         if (Platform.OS === "web") {
-          if (typeof window !== "undefined" && window.confirm("Want to add a photo to show what's done?")) ask();
+          if (typeof window !== "undefined" && window.confirm("Nice work! 🎉\nDo you want to add a picture to prove your work?")) {
+            takePhoto();
+          }
         } else {
-          Alert.alert("Nice work! 🎉", "Want to add a photo to show what's done?", [
-            { text: "Skip", style: "cancel" },
-            { text: "Add Photo", onPress: ask },
-          ]);
+          Alert.alert(
+            "Nice work! 🎉",
+            "Do you want to add a picture to prove your work?",
+            [
+              { text: "Skip", style: "cancel" },
+              { text: "Choose from Gallery", onPress: goToGallery },
+              { text: "Take Photo", onPress: takePhoto, style: "default" },
+            ],
+            { cancelable: true }
+          );
         }
       }
     } catch (e: any) {

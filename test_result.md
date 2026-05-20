@@ -195,11 +195,47 @@ backend:
             proof_added notification. Cleanup via DELETE /api/todos/{id} removes the todo and
             its notifications (returns 200).
 
+frontend:
+  - task: "Create-todo: SHARE WITH (OPTIONAL) section with 3 modes"
+    implemented: true
+    working: true
+    file: "frontend/app/create-todo.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: |
+            Verified on mobile viewport 390x844 against preview URL. SHARE WITH (OPTIONAL)
+            label is visible after scrolling. All 3 toggle buttons render with correct text:
+            DON'T SHARE, FRIENDS, BY CODE (testIDs share-mode-none / -friends / -code).
+            Selecting BY CODE reveals share-code-input. Entered USR-VDQMUZ, tapped
+            CREATE TODO, todo was successfully created and appears in My Todos list.
+
+  - task: "Shared tab: 'Nice work' proof prompt after marking complete"
+    implemented: true
+    working: true
+    file: "frontend/app/(tabs)/shared.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: |
+            Logged in as recipient (reviewer2@todoshare.app, USR-VDQMUZ), opened SHARED
+            WITH ME tab, found the new shared todo, tapped its checkbox. A window.confirm
+            dialog appeared with exact text:
+            "Nice work! 🎉\nDo you want to add a picture to prove your work?"
+            On accept, no JS errors thrown. End-to-end flow (owner create+share → recipient
+            shared list → checkbox → confirm) works as specified. 0 console errors.
+
 metadata:
   created_by: "testing_agent"
   version: "1.0"
-  test_sequence: 1
-  run_ui: false
+  test_sequence: 2
+  run_ui: true
 
 test_plan:
   current_focus: []
@@ -216,3 +252,15 @@ agent_communication:
         self-notification when owner uploads their own proof. Existing auth, todo CRUD,
         share, toggle-complete, and notifications endpoints all still work.
         No regressions found.
+    - agent: "testing"
+      message: |
+        UI testing complete (Playwright, mobile 390x844, preview URL).
+        ✅ SHARE WITH (OPTIONAL) section renders in create-todo with all 3 modes
+           (DON'T SHARE / FRIENDS / BY CODE).
+        ✅ BY CODE input accepts USR-VDQMUZ and CREATE TODO succeeds; todo shows in
+           owner's My Todos and recipient's Shared with Me list.
+        ✅ When recipient taps the checkbox, a window.confirm fires with
+           "Nice work! 🎉\nDo you want to add a picture to prove your work?"
+           (web fallback for Alert.alert as designed).
+        ✅ 0 console errors, 0 page errors during full flow.
+        No regressions in login, logout, create todo, list todos, shared list rendering.

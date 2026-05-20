@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -57,6 +57,39 @@ export default function CreateTodo() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // ---- SHARE WHILE CREATING (only in create mode) ----
+  type Friend = { id: string; friend_user_id: string; nickname: string; name: string; user_code: string };
+  const [shareMode, setShareMode] = useState<"none" | "friends" | "code">("none");
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
+  const [shareCode, setShareCode] = useState("");
+  const [loadingFriends, setLoadingFriends] = useState(false);
+
+  useEffect(() => {
+    if (!isEdit) {
+      loadFriends();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const loadFriends = async () => {
+    try {
+      setLoadingFriends(true);
+      const data = await api.listFriends();
+      setFriends(Array.isArray(data) ? data : []);
+    } catch (e) {
+      // silent — sharing is optional
+    } finally {
+      setLoadingFriends(false);
+    }
+  };
+
+  const toggleFriend = (userId: string) => {
+    setSelectedFriendIds((prev) =>
+      prev.includes(userId) ? prev.filter((x) => x !== userId) : [...prev, userId]
+    );
+  };
+
   // Web fallback values
   const dateInputValue = format(date, "yyyy-MM-dd");
   const timeInputValue = format(date, "HH:mm");
@@ -99,6 +132,16 @@ export default function CreateTodo() {
       setError("Scheduled time must be in the future");
       return;
     }
+    // Validate share inputs (only in create mode)
+    if (!isEdit) {
+      if (shareMode === "friends" && selectedFriendIds.length === 0) {
+        // allowed: treat as no share
+      }
+      if (shareMode === "code" && !shareCode.trim()) {
+        setError("Please enter a share code or switch to NONE");
+        return;
+      }
+    }
     setError("");
     setSaving(true);
     try {
@@ -112,10 +155,43 @@ export default function CreateTodo() {
       };
       if (isEdit && editId) {
         await api.updateTodo(editId, payload);
-      } else {
-        await api.createTodo(payload);
+        router.back();
+        return;
       }
-      router.back();
+      const created = await api.createTodo(payload);
+      const newId: string | undefined = created?.id;
+
+      // Collect target user codes
+      const targetCodes: string[] = [];
+      if (shareMode === "friends" && selectedFriendIds.length > 0) {
+        selectedFriendIds.forEach((fid) => {
+          const f = friends.find((x) => x.friend_user_id === fid);
+          if (f?.user_code) targetCodes.push(f.user_code);
+        });
+      } else if (shareMode === "code" && shareCode.trim()) {
+        targetCodes.push(shareCode.trim().toUpperCase());
+      }
+
+      // Share sequentially; collect errors but don't block completion
+      const shareErrors: string[] = [];
+      if (newId && targetCodes.length > 0) {
+        for (const code of targetCodes) {
+          try {
+            await api.shareTodo(newId, code);
+          } catch (e: any) {
+            shareErrors.push(`${code}: ${e?.message || "share failed"}`);
+          }
+        }
+      }
+      if (shareErrors.length > 0) {
+        Alert.alert(
+          "Todo created, but some shares failed",
+          shareErrors.join("\n"),
+          [{ text: "OK", onPress: () => router.back() }]
+        );
+      } else {
+        router.back();
+      }
     } catch (e: any) {
       setError(e.message || (isEdit ? "Failed to update todo" : "Failed to create todo"));
     } finally {
@@ -316,6 +392,99 @@ export default function CreateTodo() {
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
+          {!isEdit && (
+            <View>
+              <Text style={styles.label}>SHARE WITH (OPTIONAL)</Text>
+              <View style={styles.shareModeRow}>
+                {(["none", "friends", "code"] as const).map((m) => (
+                  <TouchableOpacity
+                    key={m}
+                    testID={`share-mode-${m}`}
+                    style={[
+                      styles.shareModeBtn,
+                      shareMode === m && { backgroundColor: colors.text },
+                    ]}
+                    onPress={() => setShareMode(m)}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        styles.shareModeText,
+                        shareMode === m && { color: "#fff" },
+                      ]}
+                    >
+                      {m === "none" ? "DON'T SHARE" : m === "friends" ? "FRIENDS" : "BY CODE"}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {shareMode === "friends" && (
+                <View style={styles.shareBox}>
+                  {loadingFriends ? (
+                    <ActivityIndicator color={colors.text} />
+                  ) : friends.length === 0 ? (
+                    <View style={{ alignItems: "center", padding: 16 }}>
+                      <Text style={styles.emptyText}>No friends yet.</Text>
+                      <TouchableOpacity
+                        onPress={() => router.push("/friends")}
+                        style={styles.addFriendsBtn}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="person-add" size={16} color={colors.text} />
+                        <Text style={styles.addFriendsText}>ADD FRIENDS</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <>
+                      <Text style={styles.helperText}>
+                        Tap to select. {selectedFriendIds.length} selected.
+                      </Text>
+                      {friends.map((f) => {
+                        const checked = selectedFriendIds.includes(f.friend_user_id);
+                        return (
+                          <TouchableOpacity
+                            key={f.id}
+                            testID={`share-friend-${f.friend_user_id}`}
+                            style={[styles.friendRow, checked && styles.friendRowChecked]}
+                            onPress={() => toggleFriend(f.friend_user_id)}
+                            activeOpacity={0.7}
+                          >
+                            <View style={[styles.checkbox, checked && { backgroundColor: colors.text }]}>
+                              {checked && <Ionicons name="checkmark" size={16} color="#fff" />}
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.friendName}>{f.nickname || f.name}</Text>
+                              <Text style={styles.friendCode}>{f.user_code}</Text>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </>
+                  )}
+                </View>
+              )}
+
+              {shareMode === "code" && (
+                <View style={styles.shareBox}>
+                  <Text style={styles.helperText}>
+                    Enter the unique user code (e.g., USR-ABC123) you want to share this to-do with.
+                  </Text>
+                  <TextInput
+                    testID="share-code-input"
+                    style={styles.input}
+                    value={shareCode}
+                    onChangeText={(t) => setShareCode(t.toUpperCase())}
+                    placeholder="USR-XXXXXX"
+                    placeholderTextColor={colors.borderLight}
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                  />
+                </View>
+              )}
+            </View>
+          )}
+
           <TouchableOpacity
             testID="save-todo-btn"
             style={[styles.saveBtn, saving && { opacity: 0.6 }]}
@@ -417,4 +586,63 @@ const styles = StyleSheet.create({
     ...shadows.brutal,
   },
   saveBtnText: { color: "#fff", fontSize: 14, fontWeight: "900", letterSpacing: 2 },
+  shareModeRow: { flexDirection: "row", gap: 8 },
+  shareModeBtn: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderWidth: 2,
+    borderColor: colors.border,
+    paddingVertical: 12,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    ...shadows.brutal,
+    shadowOffset: { width: 2, height: 2 },
+  },
+  shareModeText: { fontSize: 11, fontWeight: "900", letterSpacing: 1, color: colors.text },
+  shareBox: {
+    backgroundColor: colors.card,
+    borderWidth: 2,
+    borderColor: colors.border,
+    padding: 12,
+    marginTop: 10,
+  },
+  helperText: { fontSize: 12, fontWeight: "700", color: colors.textMuted, marginBottom: 10 },
+  friendRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderWidth: 2,
+    borderColor: colors.border,
+    marginBottom: 8,
+    backgroundColor: colors.bg,
+  },
+  friendRowChecked: { backgroundColor: colors.butter },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderWidth: 2,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+  },
+  friendName: { fontSize: 14, fontWeight: "900", color: colors.text },
+  friendCode: { fontSize: 11, fontWeight: "700", color: colors.text, opacity: 0.6, marginTop: 2, letterSpacing: 1 },
+  emptyText: { fontSize: 13, fontWeight: "700", color: colors.text, opacity: 0.6, marginBottom: 10 },
+  addFriendsBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.butter,
+    ...shadows.brutal,
+    shadowOffset: { width: 2, height: 2 },
+  },
+  addFriendsText: { fontSize: 11, fontWeight: "900", letterSpacing: 1.5, color: colors.text },
 });

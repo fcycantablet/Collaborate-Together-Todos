@@ -1,5 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -1042,6 +1043,11 @@ async def root():
 
 
 app.include_router(api_router)
+
+# Mount static screenshots folder (for App Store screenshot delivery)
+SCREENSHOTS_DIR = ROOT_DIR / "screenshots"
+SCREENSHOTS_DIR.mkdir(exist_ok=True)
+app.mount("/api/screenshots", StaticFiles(directory=str(SCREENSHOTS_DIR)), name="screenshots")
 
 app.add_middleware(
     CORSMiddleware,

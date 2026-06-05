@@ -1,6 +1,6 @@
 import { getItem } from "./storage";
 
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || "https://collaborate-together-api.onrender.com";
 export const API_BASE = `${BACKEND_URL}/api`;
 
 async function request(path: string, opts: RequestInit = {}, auth = true): Promise<any> {

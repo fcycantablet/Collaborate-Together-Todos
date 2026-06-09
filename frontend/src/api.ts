@@ -35,6 +35,8 @@ export const api = {
   me: () => request("/auth/me"),
   updatePushToken: (push_token: string) =>
     request("/auth/push-token", { method: "POST", body: JSON.stringify({ push_token }) }),
+  deleteAccount: (password: string) =>
+    request("/auth/account", { method: "DELETE", body: JSON.stringify({ password }) }),
 
   getMyTodos: () => request("/todos"),
   getSharedTodos: () => request("/todos/shared"),

@@ -66,6 +66,10 @@ class AuthResponse(BaseModel):
     user: UserResponse
 
 
+class DeleteAccountRequest(BaseModel):
+    password: str
+
+
 class PushTokenUpdate(BaseModel):
     push_token: str
 
@@ -354,6 +358,70 @@ async def update_push_token(data: PushTokenUpdate, current_user: dict = Depends(
         {"$set": {"push_token": data.push_token}}
     )
     return {"success": True}
+
+
+@api_router.delete("/auth/account")
+async def delete_account(data: DeleteAccountRequest, current_user: dict = Depends(get_current_user)):
+    """
+    Permanently delete the authenticated user's account and all related data.
+    Required by Apple Guideline 5.1.1(v).
+
+    Re-verifies the user's password before proceeding to prevent accidental
+    or unauthorized deletion. Cascades the delete across todos, shared todos,
+    notifications, friends, and friend requests so no orphan data remains.
+    """
+    # Re-verify password to confirm intent (defence in depth).
+    # get_current_user strips password_hash for safety, so fetch the full record here.
+    user_id = current_user["id"]
+    full_user = await db.users.find_one({"id": user_id})
+    if not full_user or not verify_password(data.password, full_user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Incorrect password")
+
+    # Cancel any pending scheduled notification jobs for this user's todos
+    try:
+        owned_todos = await db.todos.find({"owner_id": user_id}, {"id": 1}).to_list(length=None)
+        for t in owned_todos:
+            job_id = f"todo_{t['id']}"
+            try:
+                scheduler.remove_job(job_id)
+            except Exception:
+                pass  # Job may not exist
+    except Exception as e:
+        logger.warning(f"Failed to cancel scheduler jobs for user {user_id}: {e}")
+
+    # 1. Delete all todos owned by the user
+    await db.todos.delete_many({"owner_id": user_id})
+
+    # 2. Remove the user from any todos that were shared WITH them
+    await db.todos.update_many(
+        {"shared_with": user_id},
+        {"$pull": {"shared_with": user_id}}
+    )
+
+    # 3. Delete all notifications targeted at this user
+    await db.notifications.delete_many({"user_id": user_id})
+
+    # 4. Delete all notifications this user generated (clean-up)
+    await db.notifications.delete_many({"actor_id": user_id})
+
+    # 5. Delete friend requests sent or received by this user
+    await db.friend_requests.delete_many({
+        "$or": [{"from_user_id": user_id}, {"to_user_id": user_id}]
+    })
+
+    # 6. Delete friendship documents (both directions)
+    await db.friends.delete_many({
+        "$or": [{"owner_id": user_id}, {"friend_id": user_id}]
+    })
+
+    # 7. Finally, delete the user record itself
+    result = await db.users.delete_one({"id": user_id})
+
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    logger.info(f"Account permanently deleted: {current_user.get('email')} ({user_id})")
+    return {"success": True, "message": "Account permanently deleted"}
 
 
 # ============ TODO ROUTES ============

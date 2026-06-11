@@ -1109,7 +1109,7 @@ async def remove_friend(friend_id: str, current_user: dict = Depends(get_current
     return {"success": True}
 
 
-@api_router.get("/")
+@api_router.api_route("/", methods=["GET", "HEAD"])
 async def root():
     return {"message": "TodoShare API running"}
 

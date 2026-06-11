@@ -69,3 +69,8 @@ Apple rejected Build 9 (v1.0.2) on 3 points; all fixed in container, awaiting us
 - P2: Forgot Password flow; custom backend domain
 - P3: Apple Sign-In; splash branding polish
 - Recommended: keep Render awake with free uptime ping (cron-job.org / UptimeRobot hitting /api/ every 10 min) or upgrade Render plan
+
+### 2026-06-11 (later) — iPad time/date picker bug fix
+- Bug: On iPad, tapping date/time in create-todo showed nothing (worked on iPhone). Cause: DateTimePicker rendered without `display` prop inside a zero-space flex row — iPad popover had nothing to anchor to.
+- Fix: iOS now presents pickers in a Modal with `display="spinner"` + themeVariant light + DONE button (deterministic on iPhone AND iPad). Android keeps native dialog behavior. Also removed stray corrupted lines at end of create-todo.tsx styles.
+- Verified: tsc clean, web smoke test (login → create-todo renders). Native iPad verification by user on TestFlight.

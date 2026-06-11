@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,10 +9,12 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  Keyboard,
 } from "react-native";
 import { useRouter, Link } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../src/auth";
+import { pingServer } from "../../src/api";
 import { colors, shadows } from "../../src/theme";
 
 export default function Register() {
@@ -24,6 +26,11 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // Wake the server while the user types credentials (cold-start guard)
+  useEffect(() => {
+    pingServer();
+  }, []);
+
   const handleRegister = async () => {
     if (!name || !email || !password) {
       setError("Please fill in all fields");
@@ -33,6 +40,7 @@ export default function Register() {
       setError("Password must be at least 6 characters");
       return;
     }
+    Keyboard.dismiss();
     setError("");
     setLoading(true);
     try {

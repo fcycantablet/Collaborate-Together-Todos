@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,11 +9,12 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
-  Alert,
+  Keyboard,
 } from "react-native";
 import { useRouter, Link } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../src/auth";
+import { pingServer } from "../../src/api";
 import { colors, shadows } from "../../src/theme";
 
 export default function Login() {
@@ -24,11 +25,17 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // Wake the server while the user types credentials (cold-start guard)
+  useEffect(() => {
+    pingServer();
+  }, []);
+
   const handleLogin = async () => {
     if (!email || !password) {
       setError("Please fill in all fields");
       return;
     }
+    Keyboard.dismiss();
     setError("");
     setLoading(true);
     try {

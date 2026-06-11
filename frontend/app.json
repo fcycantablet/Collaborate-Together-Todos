@@ -2,7 +2,7 @@
   "expo": {
     "name": "Collaborate Together",
     "slug": "collaborate-together",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "todoshare",
@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.emergent.remindtogether6d1d10023",
-      "buildNumber": "3",
+      "buildNumber": "10",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Attach images to your to-dos",
         "NSCameraUsageDescription": "Capture images for your to-dos",

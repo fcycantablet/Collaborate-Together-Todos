@@ -1,6 +1,7 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -1108,6 +1109,92 @@ async def remove_friend(friend_id: str, current_user: dict = Depends(get_current
 @api_router.get("/")
 async def root():
     return {"message": "TodoShare API running"}
+
+
+SUPPORT_PAGE_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Collaborate Together — Support</title>
+<style>
+  :root { --bg:#FFFDF9; --ink:#0A0A0A; --butter:#FFE45C; --muted:#555; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; line-height:1.6; }
+  .wrap { max-width:720px; margin:0 auto; padding:48px 24px 80px; }
+  .hero { background:var(--butter); border:3px solid var(--ink); padding:32px; box-shadow:6px 6px 0 var(--ink); margin-bottom:40px; }
+  .hero .kicker { font-size:12px; font-weight:900; letter-spacing:4px; margin-bottom:8px; }
+  h1 { font-size:40px; font-weight:900; letter-spacing:-1px; line-height:1.1; }
+  h2 { font-size:20px; font-weight:900; margin:36px 0 12px; letter-spacing:-0.5px; }
+  .card { background:#fff; border:3px solid var(--ink); padding:24px; box-shadow:4px 4px 0 var(--ink); margin-bottom:20px; }
+  .card h3 { font-size:16px; font-weight:800; margin-bottom:6px; }
+  .card p { color:var(--muted); font-size:15px; }
+  .contact { background:var(--ink); color:#fff; border:3px solid var(--ink); padding:28px; box-shadow:6px 6px 0 var(--butter); margin-top:40px; }
+  .contact h2 { color:#fff; margin-top:0; }
+  .contact a { color:var(--butter); font-weight:800; font-size:18px; text-decoration:none; }
+  .contact p { font-size:14px; opacity:.85; margin-top:8px; }
+  footer { margin-top:48px; font-size:12px; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <div class="kicker">COLLABORATE TOGETHER</div>
+    <h1>Support &amp; Help Center</h1>
+  </div>
+
+  <h2>Frequently Asked Questions</h2>
+
+  <div class="card">
+    <h3>How do I share a to-do with someone?</h3>
+    <p>Open a to-do and tap the share icon. Enter your friend's unique user code (found on their Profile screen) or pick someone from your friends list. They will see the to-do in their "Shared" tab and get notified on the scheduled day.</p>
+  </div>
+
+  <div class="card">
+    <h3>How do friend requests work?</h3>
+    <p>Go to Profile → Friends and add a friend using their unique user code. Once they accept your request, you can share to-dos with one tap.</p>
+  </div>
+
+  <div class="card">
+    <h3>Why am I not receiving notifications?</h3>
+    <p>Make sure you allowed notifications when the app asked. You can also enable them anytime in iOS Settings → Notifications → Collaborate Together.</p>
+  </div>
+
+  <div class="card">
+    <h3>How do I add proof of completion?</h3>
+    <p>When completing a shared to-do, tap "Add Proof" to attach up to 10 photos so the owner can see the task was done.</p>
+  </div>
+
+  <div class="card">
+    <h3>How do I delete my account?</h3>
+    <p>Go to Profile → scroll to the Danger Zone → tap "Delete Account" and confirm with your password. This permanently removes your account and all associated data (to-dos, friends, notifications) from our servers.</p>
+  </div>
+
+  <div class="card">
+    <h3>I forgot my password. What do I do?</h3>
+    <p>Email us at the address below from the email you registered with and we will help you regain access to your account.</p>
+  </div>
+
+  <div class="contact">
+    <h2>Contact Us</h2>
+    <a href="mailto:fcycantablet@gmail.com">fcycantablet@gmail.com</a>
+    <p>For any questions, bug reports, account issues, or feedback — email us and we will respond within 48 hours. No account or login is required to contact support.</p>
+  </div>
+
+  <footer>Collaborate Together — a shared to-do &amp; reminders app. This page is the official support resource for the iOS app.</footer>
+</div>
+</body>
+</html>"""
+
+
+@app.get("/support", response_class=HTMLResponse, include_in_schema=False)
+async def support_page():
+    return HTMLResponse(content=SUPPORT_PAGE_HTML)
+
+
+@api_router.get("/support", response_class=HTMLResponse, include_in_schema=False)
+async def support_page_api():
+    return HTMLResponse(content=SUPPORT_PAGE_HTML)
 
 
 app.include_router(api_router)

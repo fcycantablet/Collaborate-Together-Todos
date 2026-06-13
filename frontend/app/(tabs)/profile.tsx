@@ -78,6 +78,7 @@ export default function Profile() {
     try {
       await api.deleteAccount(deletePassword);
       setDeleteModalVisible(false);
+      // Brief confirmation, then send back to login
       await logout();
       if (Platform.OS === "web") {
         if (typeof window !== "undefined")
@@ -85,7 +86,7 @@ export default function Profile() {
       } else {
         Alert.alert(
           "Account Deleted",
-          "Your account and all related data have been permanently removed."
+          "Your account and all related data have been permanently removed.",
         );
       }
       router.replace("/(auth)/login");

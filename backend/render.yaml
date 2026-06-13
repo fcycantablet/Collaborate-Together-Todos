@@ -1,9 +1,13 @@
+# Render Blueprint — One-click deploy for Collaborate Together backend
+# Docs: https://render.com/docs/blueprint-spec
+
 services:
   - type: web
     name: collaborate-together-api
     runtime: python
-    plan: free
-    region: oregon
+    plan: free  # Upgrade to 'starter' ($7/mo) to avoid cold-start sleeping after 15 min idle
+    region: oregon  # Pick closest to your users: oregon | frankfurt | singapore | ohio
+    rootDir: backend
     buildCommand: pip install -r requirements-prod.txt
     startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT --workers 2
     healthCheckPath: /api/
@@ -12,8 +16,8 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: MONGO_URL
-        sync: false
+        sync: false  # You'll paste your MongoDB Atlas connection string in Render dashboard
       - key: DB_NAME
         value: collaborate_together
       - key: JWT_SECRET
-        generateValue: true
+        generateValue: true  # Render auto-generates a strong secret

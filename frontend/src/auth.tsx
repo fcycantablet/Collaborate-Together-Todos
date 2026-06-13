@@ -16,6 +16,7 @@ type AuthCtx = {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string) => Promise<void>;
+  loginWithAuthResponse: (token: string, user: User) => Promise<void>;
   logout: () => Promise<void>;
   refreshMe: () => Promise<void>;
 };
@@ -103,6 +104,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(res.user);
   };
 
+  const loginWithAuthResponse = async (token: string, u: User) => {
+    await setItem("auth_token", token);
+    setUser(u);
+  };
+
   const logout = async () => {
     await removeItem("auth_token");
     setUser(null);
@@ -116,7 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ user, loading, login, register, logout, refreshMe }}>
+    <Ctx.Provider value={{ user, loading, login, register, loginWithAuthResponse, logout, refreshMe }}>
       {children}
     </Ctx.Provider>
   );

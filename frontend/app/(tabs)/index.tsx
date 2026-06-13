@@ -147,6 +147,7 @@ export default function MyTodos() {
             onDelete={() => deleteTodo(item.id)}
             onClearReminder={() => clearReminder(item.id)}
             onAddProof={() => openProof(item)}
+            onPress={() => router.push({ pathname: "/todo-detail", params: { todoId: item.id } })}
             onSetReminder={() =>
               router.push({ pathname: "/set-reminder", params: { todoId: item.id, title: item.title } })
             }

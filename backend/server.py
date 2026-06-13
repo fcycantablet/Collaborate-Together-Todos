@@ -33,6 +33,12 @@ JWT_SECRET = os.environ.get("JWT_SECRET", "todoshare_secret_change_in_prod_2026"
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_DAYS = 30
 
+# Resend Email
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+MAIL_FROM = os.environ.get("MAIL_FROM", "Collaborate Together <onboarding@resend.dev>")
+RESEND_API_URL = "https://api.resend.com/emails"
+PASSWORD_RESET_TTL_MINUTES = 15
+
 # Expo Push API
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 
@@ -72,6 +78,20 @@ class AuthResponse(BaseModel):
 
 class DeleteAccountRequest(BaseModel):
     password: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    code: str
+    new_password: str
+
+
+class CommentCreate(BaseModel):
+    text: str
 
 
 class PushTokenUpdate(BaseModel):
@@ -253,6 +273,55 @@ async def send_expo_push(push_tokens: List[str], title: str, body: str, data: di
         logging.error(f"Push notification error: {e}")
 
 
+async def send_resend_email(to_email: str, subject: str, html: str) -> bool:
+    """Send transactional email via Resend HTTP API."""
+    if not RESEND_API_KEY:
+        logger.warning("RESEND_API_KEY not configured; skipping email send")
+        return False
+    payload = {
+        "from": MAIL_FROM,
+        "to": [to_email],
+        "subject": subject,
+        "html": html,
+    }
+    headers = {
+        "Authorization": f"Bearer {RESEND_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client_http:
+            r = await client_http.post(RESEND_API_URL, json=payload, headers=headers)
+            if r.status_code >= 400:
+                logger.error(f"Resend send failed {r.status_code}: {r.text}")
+                return False
+            return True
+    except Exception as e:
+        logger.error(f"Resend exception: {e}")
+        return False
+
+
+def build_password_reset_email_html(name: str, code: str) -> str:
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#FFFDF9;font-family:-apple-system,Helvetica,Arial,sans-serif;color:#0A0A0A;">
+  <div style="max-width:560px;margin:0 auto;padding:32px 24px;">
+    <div style="background:#FFE45C;border:3px solid #0A0A0A;padding:28px;box-shadow:6px 6px 0 #0A0A0A;margin-bottom:32px;">
+      <div style="font-size:11px;font-weight:900;letter-spacing:3px;margin-bottom:8px;">COLLABORATE TOGETHER</div>
+      <h1 style="font-size:30px;font-weight:900;margin:0;letter-spacing:-1px;line-height:1.1;">Reset your password</h1>
+    </div>
+    <p style="font-size:16px;line-height:1.55;">Hi {name or 'there'},</p>
+    <p style="font-size:15px;line-height:1.6;color:#444;">We received a request to reset your password. Use the verification code below to set a new password. The code expires in {PASSWORD_RESET_TTL_MINUTES} minutes.</p>
+    <div style="background:#fff;border:3px solid #0A0A0A;padding:24px;text-align:center;margin:28px 0;box-shadow:4px 4px 0 #0A0A0A;">
+      <div style="font-size:11px;font-weight:900;letter-spacing:3px;color:#555;margin-bottom:8px;">YOUR CODE</div>
+      <div style="font-size:42px;font-weight:900;letter-spacing:14px;font-family:monospace;">{code}</div>
+    </div>
+    <p style="font-size:13px;color:#666;line-height:1.5;">Didn't request this? You can safely ignore this email — your password will not be changed.</p>
+    <hr style="border:none;border-top:1px solid #ddd;margin:32px 0 16px;">
+    <p style="font-size:11px;color:#888;">Collaborate Together — shared to-dos & reminders</p>
+  </div>
+</body></html>"""
+
+
 async def trigger_todo_notification(todo_id: str):
     """Triggered at scheduled time. Sends push + creates in-app notifications."""
     todo = await db.todos.find_one({"id": todo_id}, {"_id": 0})
@@ -311,7 +380,8 @@ def schedule_todo_notification(todo_id: str, scheduled_at_iso: str):
 # ============ AUTH ROUTES ============
 @api_router.post("/auth/register", response_model=AuthResponse)
 async def register(data: UserRegister):
-    existing = await db.users.find_one({"email": data.email})
+    email = data.email.lower().strip()
+    existing = await db.users.find_one({"email": email})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
@@ -325,7 +395,7 @@ async def register(data: UserRegister):
     now = datetime.now(timezone.utc).isoformat()
     user_doc = {
         "id": user_id,
-        "email": data.email,
+        "email": email,
         "password_hash": hash_password(data.password),
         "name": data.name,
         "user_code": code,
@@ -334,20 +404,101 @@ async def register(data: UserRegister):
     }
     await db.users.insert_one(user_doc)
 
-    token = create_jwt_token(user_id, data.email)
+    token = create_jwt_token(user_id, email)
     user_resp = user_to_response(user_doc)
     return AuthResponse(token=token, user=user_resp)
 
 
 @api_router.post("/auth/login", response_model=AuthResponse)
 async def login(data: UserLogin):
-    user = await db.users.find_one({"email": data.email})
+    email = data.email.lower().strip()
+    user = await db.users.find_one({"email": email})
     if not user or not verify_password(data.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     token = create_jwt_token(user["id"], user["email"])
     user_resp = user_to_response(user)
     return AuthResponse(token=token, user=user_resp)
+
+
+@api_router.post("/auth/forgot-password")
+async def forgot_password(data: ForgotPasswordRequest):
+    """
+    Send a 6-digit reset code to the email if it exists. Always responds with
+    success to avoid leaking which emails are registered.
+    """
+    email = data.email.lower().strip()
+    user = await db.users.find_one({"email": email})
+
+    # Generate, persist, and email (only if user exists)
+    if user:
+        # Invalidate any existing codes for this email
+        await db.password_resets.delete_many({"email": email})
+        code = "".join(random.choices(string.digits, k=6))
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=PASSWORD_RESET_TTL_MINUTES)
+        await db.password_resets.insert_one({
+            "id": str(uuid.uuid4()),
+            "email": email,
+            "code_hash": hash_password(code),
+            "expires_at": expires_at.isoformat(),
+            "used": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        try:
+            html = build_password_reset_email_html(user.get("name", ""), code)
+            await send_resend_email(email, "Your password reset code", html)
+        except Exception as e:
+            logger.error(f"Failed to send reset email: {e}")
+            # Still respond 200 to avoid leaking; user can retry
+
+    return {"success": True, "message": "If an account exists for that email, a reset code has been sent."}
+
+
+@api_router.post("/auth/reset-password", response_model=AuthResponse)
+async def reset_password(data: ResetPasswordRequest):
+    """
+    Verify the OTP code and set a new password. Returns a fresh auth token so
+    the user is signed back in immediately on success.
+    """
+    if len(data.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    email = data.email.lower().strip()
+    code = data.code.strip()
+
+    user = await db.users.find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid code or it has expired")
+
+    # Find the latest matching, unused, non-expired code for this email
+    candidates = await db.password_resets.find({"email": email, "used": False}).sort("created_at", -1).to_list(10)
+    matched = None
+    now = datetime.now(timezone.utc)
+    for c in candidates:
+        try:
+            exp = datetime.fromisoformat(c["expires_at"])
+        except Exception:
+            continue
+        if exp < now:
+            continue
+        if verify_password(code, c["code_hash"]):
+            matched = c
+            break
+
+    if not matched:
+        raise HTTPException(status_code=400, detail="Invalid code or it has expired")
+
+    # Update password and mark code used
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"password_hash": hash_password(data.new_password)}}
+    )
+    await db.password_resets.update_one({"id": matched["id"]}, {"$set": {"used": True}})
+    # Clean up any other outstanding codes for the email
+    await db.password_resets.delete_many({"email": email, "used": False})
+
+    token = create_jwt_token(user["id"], user["email"])
+    return AuthResponse(token=token, user=user_to_response(user))
 
 
 @api_router.get("/auth/me", response_model=UserResponse)
@@ -637,6 +788,105 @@ async def share_todo(todo_id: str, data: TodoShareRequest, current_user: dict = 
 
     updated = await db.todos.find_one({"id": todo_id}, {"_id": 0})
     return await todo_to_response(updated, current_user["id"])
+
+
+@api_router.get("/todos/{todo_id}", response_model=TodoResponse)
+async def get_single_todo(todo_id: str, current_user: dict = Depends(get_current_user)):
+    """Fetch a single to-do. Caller must be the owner or in shared_with."""
+    todo = await db.todos.find_one({"id": todo_id}, {"_id": 0})
+    if not todo:
+        raise HTTPException(status_code=404, detail="Todo not found")
+    uid = current_user["id"]
+    is_owner = todo["owner_id"] == uid
+    is_shared = any(sw["user_id"] == uid for sw in todo.get("shared_with", []))
+    if not (is_owner or is_shared):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return await todo_to_response(todo, uid)
+
+
+# ============ COMMENTS ============
+@api_router.get("/todos/{todo_id}/comments")
+async def list_comments(todo_id: str, current_user: dict = Depends(get_current_user)):
+    """All comments on a todo, oldest first. Only owner or shared users can read."""
+    todo = await db.todos.find_one({"id": todo_id}, {"_id": 0})
+    if not todo:
+        raise HTTPException(status_code=404, detail="Todo not found")
+    uid = current_user["id"]
+    is_owner = todo["owner_id"] == uid
+    is_shared = any(sw["user_id"] == uid for sw in todo.get("shared_with", []))
+    if not (is_owner or is_shared):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    comments = await db.comments.find({"todo_id": todo_id}, {"_id": 0}).sort("created_at", 1).to_list(2000)
+    return comments
+
+
+@api_router.post("/todos/{todo_id}/comments")
+async def add_comment(todo_id: str, data: CommentCreate, current_user: dict = Depends(get_current_user)):
+    """Post a comment. Notifies all other participants (owner + recipients)."""
+    text = (data.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Comment cannot be empty")
+    if len(text) > 1000:
+        raise HTTPException(status_code=400, detail="Comment too long (max 1000 chars)")
+
+    todo = await db.todos.find_one({"id": todo_id}, {"_id": 0})
+    if not todo:
+        raise HTTPException(status_code=404, detail="Todo not found")
+
+    uid = current_user["id"]
+    is_owner = todo["owner_id"] == uid
+    is_shared = any(sw["user_id"] == uid for sw in todo.get("shared_with", []))
+    if not (is_owner or is_shared):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    now = datetime.now(timezone.utc).isoformat()
+    comment = {
+        "id": str(uuid.uuid4()),
+        "todo_id": todo_id,
+        "user_id": uid,
+        "user_name": current_user["name"],
+        "text": text,
+        "created_at": now,
+    }
+    await db.comments.insert_one(comment)
+
+    # Build recipient list: owner + all shared users, minus the commenter
+    participant_ids = set()
+    participant_ids.add(todo["owner_id"])
+    for sw in todo.get("shared_with", []):
+        participant_ids.add(sw["user_id"])
+    participant_ids.discard(uid)
+
+    if participant_ids:
+        # Push notifications
+        users = await db.users.find({"id": {"$in": list(participant_ids)}}, {"_id": 0}).to_list(100)
+        push_tokens = [u.get("push_token") for u in users if u.get("push_token")]
+        preview = text if len(text) <= 80 else text[:80] + "…"
+        title = f"💬 New comment on {todo['title']}"
+        body = f"{current_user['name']}: {preview}"
+        await send_expo_push(push_tokens, title, body, {"todo_id": todo_id, "type": "comment"})
+
+        # In-app notifications
+        notifs = [
+            {
+                "id": str(uuid.uuid4()),
+                "user_id": pid,
+                "actor_id": uid,
+                "todo_id": todo_id,
+                "type": "comment",
+                "title": "New Comment",
+                "body": body,
+                "read": False,
+                "created_at": now,
+            }
+            for pid in participant_ids
+        ]
+        await db.notifications.insert_many(notifs)
+
+    # Strip MongoDB's _id (added by insert_one) before returning
+    comment.pop("_id", None)
+    return comment
 
 
 # ============ COMPLETION PROOFS ============

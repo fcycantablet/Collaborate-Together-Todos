@@ -103,6 +103,9 @@ export default function Login() {
               )}
             </TouchableOpacity>
 
+            {/* Forgot Password link hidden — requires verified domain on Resend.
+                Backend endpoints + screens remain in codebase for easy re-enable. */}
+
             <View style={styles.footerRow}>
               <Text style={styles.footerText}>No account?</Text>
               <Link href="/(auth)/register" asChild>
@@ -207,4 +210,6 @@ const styles = StyleSheet.create({
   },
   footerText: { color: colors.textSecondary, fontWeight: "600" },
   linkText: { color: colors.text, fontWeight: "900", letterSpacing: 1 },
+  forgotBtn: { paddingVertical: 14, alignItems: "center", marginTop: 8 },
+  forgotText: { color: colors.text, fontWeight: "900", letterSpacing: 1.5, fontSize: 11 },
 });

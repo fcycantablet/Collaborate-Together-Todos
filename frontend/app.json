@@ -2,7 +2,7 @@
   "expo": {
     "name": "Collaborate Together",
     "slug": "collaborate-together",
-    "version": "1.0.4",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "todoshare",
@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.emergent.remindtogether6d1d10023",
-      "buildNumber": "13",
+      "buildNumber": "10",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Attach images to your to-dos",
         "NSCameraUsageDescription": "Capture images for your to-dos",
@@ -20,18 +20,17 @@
     },
     "android": {
       "package": "app.emergent.remindtogether6d1d10023",
-      "versionCode": 13,
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#FFFDF9"
       },
       "edgeToEdgeEnabled": true,
       "permissions": [
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.CAMERA",
-        "android.permission.NOTIFICATIONS",
-        "android.permission.RECORD_AUDIO"
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "CAMERA",
+        "NOTIFICATIONS"
       ]
     },
     "web": {
@@ -64,13 +63,6 @@
     ],
     "experiments": {
       "typedRoutes": true
-    },
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "892aed7f-b028-45ce-82d3-7cb98f4331e4"
-      }
-    },
-    "owner": "fcycantablet"
+    }
   }
 }

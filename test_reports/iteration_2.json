@@ -1,0 +1,59 @@
+{
+  "summary": "Apple resubmit regression — Build 10. Both backend (14/14 pytest) and frontend (Expo web) flows pass on mobile viewport (390x844). Splash redirects to login without freezing, register lands on MY TODOS tabs, app stays responsive (SHARED/ALERTS/PROFILE tabs all tappable), logout returns to login, re-login lands on tabs, wrong-password shows 'Invalid email or password'. Support page (/api/support) returns HTML with required contact email (note: preview proxy obfuscates the email via Cloudflare email-protection but raw backend HTML contains 'fcycantablet@gmail.com' — verified against localhost:8001). Warm-up ping (GET /api/) returns 200. Badges, full todo CRUD (create→GET, toggle complete→GET, delete→GET 404) and auth (register/login/me + duplicate-email and wrong-password negatives) all pass.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/support (preview URL only)",
+        "issue": "Cloudflare email-protection on the preview proxy obfuscates 'fcycantablet@gmail.com' into a [email protected] span. This is a CDN behaviour on the *.preview.emergentagent.com edge, NOT a backend bug. The raw FastAPI response (verified at http://localhost:8001/api/support) contains the literal email. Production Render URL (collaborate-together-api.onrender.com) used by the iOS Apple Reviewer build returns the email un-obfuscated, so this does not affect App Store review."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "global (web bundler warnings)",
+        "issues": [
+          "Console warning: 'shadow*' style props are deprecated. Use \"boxShadow\". (cosmetic, web-only — does not affect iOS native build)",
+          "Console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents' (cosmetic, web-only)"
+        ]
+      }
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_apple_resubmit_regression.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "None blocking. Apple Build 10 is good to ship from the testing standpoint: the unresponsive-after-login regression is fixed (UI confirmed responsive on web preview after register & login), the support page is publicly reachable and contains the contact email, and all auth/todos/badges endpoints are healthy.",
+    "Optional cosmetic: replace deprecated `shadow*` and `props.pointerEvents` style props to silence web warnings (no impact on iOS build).",
+    "FYI: Cloudflare on the preview hostname rewrites the support-page email into the cf email-protection span. If Apple ever reviews using the preview URL instead of the Render URL, swap the literal email for an <a class=\"__cf_email__\" ...> or disable cf email-obfuscation. Production Render URL is unaffected."
+  ],
+  "critical_code_review_comments": [
+    "src/api.ts: AbortController + 30s timeout wraps every authed call; AbortError and network errors are surfaced with user-friendly strings — exactly what was missing in Build 9. The hardcoded Render fallback URL is preserved (intentional, per agent note).",
+    "src/api.ts pingServer(): fire-and-forget warm-up with its own 60s abort timer — correctly invoked from app/index.tsx, login.tsx, register.tsx.",
+    "src/auth.tsx: push-token registration is correctly deferred (2.5s + InteractionManager.runAfterInteractions + withTimeout guards 10s/15s) and short-circuits on Platform.OS === 'web'. cancelled flag is checked at every async boundary — no race with unmount.",
+    "login.tsx and register.tsx call Keyboard.dismiss() before submit and surface errors via testID-tagged Text — good for App Review.",
+    "server.py: BOTH /support (no prefix) and /api/support exist, returning HTMLResponse with mailto link + literal email — satisfies Apple's public support-URL requirement.",
+    "server.py: account deletion is hard-cascading (todos, notifications, friends, friend_requests, scheduler jobs) + password re-verification — Apple 5.1.1(v) compliant.",
+    "server.py: All Mongo reads project away _id ({\"_id\": 0}) — JSON-serializable.",
+    "server.py warning: `JWT_SECRET` has a code default fallback. Should be required from env in production (Render). Non-blocking for this review.",
+    "server.py is ~1230 lines — over the 700-line guideline. Consider modularising auth / todos / friends into routers (not blocking).",
+    "logger usage in delete_account references `logger` before it is module-defined (logger is initialized later on line 1216). Fortunately the except block only runs on the rare path where canceling scheduler jobs throws — leaving a latent NameError. Recommended fix: replace `logger.warning(...)` with `logging.warning(...)` OR move `logger = logging.getLogger(__name__)` ABOVE the route definitions."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_apple_resubmit_regression.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (14/14 pytest)",
+    "frontend": "100% on tested flows (splash->login, wrong-password error, register->tabs, tab navigation responsive, logout, re-login)"
+  },
+  "seed_data_creation": "Each pytest run registers one throwaway TEST_resub_<uniq>@todoshare.app user; Playwright run created two webtest_<uniq>@todoshare.app users. Best-effort cleanup hook deletes the pytest user; Playwright users remain in MongoDB but are clearly TEST_ prefixed and harmless.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "BASE_URL: https://task-share-hub-2.preview.emergentagent.com (EXPO_PUBLIC_BACKEND_URL). Run regression: `EXPO_PUBLIC_BACKEND_URL=https://task-share-hub-2.preview.emergentagent.com pytest /app/backend/tests/test_apple_resubmit_regression.py -v --junitxml=/app/test_reports/pytest/pytest_results.xml`. UI testIDs in use: login-email-input, login-password-input, login-submit-button, login-error, link-to-register, register-name-input, register-email-input, register-password-input, register-submit-button, logout-btn. Expo Router note: URL stays at '/' even after navigating to (tabs) — DO NOT wait_for_url('**/(tabs)**'), wait for 'text=\"MY TODOS\"' instead. Tabs labels: 'MY TODOS', 'SHARED', 'ALERTS', 'PROFILE' (all uppercase). For destructive flows register page.on('dialog', lambda d: d.accept()). Older backend_test.py uses a stale BASE_URL — use the new test_apple_resubmit_regression.py file instead.",
+  "rca_of_issue": "N/A — the original App Review freeze fix (deferred push-token registration + 30s API timeouts + warm-up ping) is verified working on the web preview. Login/register no longer hang; UI is responsive on the very first tab render after auth."
+}

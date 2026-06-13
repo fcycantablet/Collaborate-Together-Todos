@@ -95,7 +95,7 @@ export default function CreateTodo() {
   const dateInputValue = format(date, "yyyy-MM-dd");
   const timeInputValue = format(date, "HH:mm");
 
-  const pickImage = async () => {
+  const pickFromGallery = async () => {
     try {
       if (Platform.OS !== "web") {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -122,6 +122,54 @@ export default function CreateTodo() {
     } catch (e: any) {
       Alert.alert("Error", e.message);
     }
+  };
+
+  const pickFromCamera = async () => {
+    try {
+      if (Platform.OS === "web") {
+        // Fallback to gallery on web (no camera support via picker)
+        return pickFromGallery();
+      }
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert("Camera Permission Needed", "Please allow camera access in Settings.");
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.5,
+        base64: true,
+        allowsEditing: true,
+      });
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        const base64 = asset.base64;
+        if (base64) {
+          setAttachment(`data:image/jpeg;base64,${base64}`);
+        } else if (asset.uri) {
+          setAttachment(asset.uri);
+        }
+      }
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
+    }
+  };
+
+  const pickImage = () => {
+    if (Platform.OS === "web") {
+      pickFromGallery();
+      return;
+    }
+    Alert.alert(
+      "Add a photo",
+      "Choose how to add your image",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Choose from Gallery", onPress: pickFromGallery },
+        { text: "Take Photo", onPress: pickFromCamera },
+      ],
+      { cancelable: true }
+    );
   };
 
   const save = async () => {

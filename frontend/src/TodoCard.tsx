@@ -33,6 +33,7 @@ type Props = {
   onSetReminder?: () => void;
   onClearReminder?: () => void;
   onAddProof?: () => void;
+  onPress?: () => void;
 };
 
 export default function TodoCard({
@@ -46,6 +47,7 @@ export default function TodoCard({
   onSetReminder,
   onClearReminder,
   onAddProof,
+  onPress,
 }: Props) {
   let isCompleted = false;
   if (isOwner) {
@@ -72,7 +74,10 @@ export default function TodoCard({
   }
 
   return (
-    <View
+    <TouchableOpacity
+      activeOpacity={onPress ? 0.85 : 1}
+      onPress={onPress}
+      disabled={!onPress}
       style={[styles.card, isCompleted && styles.cardCompleted]}
       testID={`todo-card-${todo.id}`}
     >
@@ -265,7 +270,7 @@ export default function TodoCard({
           </TouchableOpacity>
         </View>
       )}
-    </View>
+    </TouchableOpacity>
   );
 }
 

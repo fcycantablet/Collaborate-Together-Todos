@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
 } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../src/api";
@@ -28,6 +28,7 @@ type Notif = {
 };
 
 export default function Notifications() {
+  const router = useRouter();
   const { markNotificationsRead } = useBadges();
   const [items, setItems] = useState<Notif[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,13 +71,31 @@ export default function Notifications() {
   const getTypeColor = (type: string) => {
     if (type === "completed") return colors.mint;
     if (type === "shared") return colors.peach;
+    if (type === "proof_added") return colors.lavender;
+    if (type === "comment") return colors.sky;
+    if (type === "friend_request" || type === "friend_accepted") return colors.bg;
     return colors.butter;
   };
 
   const getTypeIcon = (type: string): keyof typeof Ionicons.glyphMap => {
     if (type === "completed") return "checkmark-circle";
     if (type === "shared") return "share-social";
+    if (type === "proof_added") return "camera";
+    if (type === "comment") return "chatbubble-ellipses";
+    if (type === "updated") return "create";
+    if (type === "friend_request") return "person-add";
+    if (type === "friend_accepted") return "people";
     return "time";
+  };
+
+  const onNotifPress = (item: Notif) => {
+    if (item.todo_id) {
+      router.push({ pathname: "/todo-detail", params: { todoId: item.todo_id } });
+      return;
+    }
+    if (item.type === "friend_request" || item.type === "friend_accepted") {
+      router.push("/friends");
+    }
   };
 
   if (loading) {
@@ -119,9 +138,11 @@ export default function Notifications() {
             timeAgo = "";
           }
           return (
-            <View
-              style={[styles.notif, !item.read && styles.notifUnread, { backgroundColor: getTypeColor(item.type) }]}
+            <TouchableOpacity
               testID={`notif-${item.id}`}
+              activeOpacity={0.7}
+              onPress={() => onNotifPress(item)}
+              style={[styles.notif, !item.read && styles.notifUnread, { backgroundColor: getTypeColor(item.type) }]}
             >
               <View style={styles.notifIcon}>
                 <Ionicons name={getTypeIcon(item.type)} size={20} color={colors.text} />
@@ -132,7 +153,7 @@ export default function Notifications() {
                 <Text style={styles.notifTime}>{timeAgo}</Text>
               </View>
               {!item.read && <View style={styles.unreadDot} />}
-            </View>
+            </TouchableOpacity>
           );
         }}
         ListEmptyComponent={
@@ -140,7 +161,7 @@ export default function Notifications() {
             <View style={styles.emptyBlock}>
               <Text style={styles.emptyEmoji}>🔔</Text>
               <Text style={styles.emptyTitle}>ALL QUIET</Text>
-              <Text style={styles.emptyDesc}>No notifications yet. We'll let you know when something happens!</Text>
+              <Text style={styles.emptyDesc}>No notifications yet. We&apos;ll let you know when something happens!</Text>
             </View>
           </View>
         }

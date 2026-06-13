@@ -175,6 +175,7 @@ export default function SharedWithMe() {
             currentUserId={user?.id || ""}
             onToggleComplete={() => toggleComplete(item.id)}
             onClearReminder={() => clearReminder(item.id)}
+            onPress={() => router.push({ pathname: "/todo-detail", params: { todoId: item.id } })}
             onSetReminder={() =>
               router.push({ pathname: "/set-reminder", params: { todoId: item.id, title: item.title } })
             }

@@ -56,6 +56,13 @@ export const api = {
     request("/auth/register", { method: "POST", body: JSON.stringify({ email, password, name }) }, false),
   login: (email: string, password: string) =>
     request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }, false),
+  forgotPassword: (email: string) =>
+    request("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }, false),
+  resetPassword: (email: string, code: string, new_password: string) =>
+    request("/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ email, code, new_password }),
+    }, false),
   me: () => request("/auth/me"),
   updatePushToken: (push_token: string) =>
     request("/auth/push-token", { method: "POST", body: JSON.stringify({ push_token }) }),
@@ -64,6 +71,7 @@ export const api = {
 
   getMyTodos: () => request("/todos"),
   getSharedTodos: () => request("/todos/shared"),
+  getTodo: (id: string) => request(`/todos/${id}`),
   createTodo: (payload: any) => request("/todos", { method: "POST", body: JSON.stringify(payload) }),
   updateTodo: (id: string, payload: any) => request(`/todos/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteTodo: (id: string) => request(`/todos/${id}`, { method: "DELETE" }),
@@ -75,6 +83,10 @@ export const api = {
   clearReminder: (id: string) => request(`/todos/${id}/remind`, { method: "DELETE" }),
   setProof: (id: string, images: string[]) =>
     request(`/todos/${id}/proof`, { method: "POST", body: JSON.stringify({ images }) }),
+
+  getComments: (id: string) => request(`/todos/${id}/comments`),
+  addComment: (id: string, text: string) =>
+    request(`/todos/${id}/comments`, { method: "POST", body: JSON.stringify({ text }) }),
 
   getNotifications: () => request("/notifications"),
   markAllRead: () => request("/notifications/mark-all-read", { method: "POST" }),

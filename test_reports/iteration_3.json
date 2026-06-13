@@ -1,0 +1,53 @@
+{
+  "summary": "Backend testing for NEW endpoints in /app/backend/server.py — 22/22 pytest pass (100%). Covered: (1) Forgot-password flow — always 200 for existing/unknown emails (anti-enumeration), 422 on invalid email format. (2) Reset-password — invalid code → 400 'Invalid code or it has expired', short password (<6) → 400, valid OTP returns AuthResponse {token, user}, password actually updated (old pw → 401, new pw → 200), reused code → 400. OTP delivery via Resend is sandbox-limited to fcycantablet@gmail.com (expected); test bypasses email by reading password_resets row from Mongo and overriding code_hash with a known plaintext. (3) Single-todo GET /api/todos/{id} — owner 200, shared user 200, unrelated user 403, non-existent 404, no-auth 401/403. (4) Comments — list & post require auth and todo participation (stranger → 403 both verbs); empty/whitespace and >1000 chars → 400; POST returns comment with no Mongo _id; in-app notifications fanned out to ALL OTHER participants (owner notified when shared user comments; shared user notified when owner comments; commenter does NOT receive a self-notification). (5) Login regression — reviewer login still 200, register→login roundtrip works, wrong password still 401. Found one minor inconsistency unrelated to the new endpoints (see code review comments).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/auth/forgot-password",
+        "issue": "Email-case inconsistency between register and forgot-password. /auth/register stores `data.email` verbatim (preserves case), but /auth/forgot-password does `data.email.lower().strip()` before lookup. If a user registers with a mixed-case local part (e.g. 'Alice@x.com'), forgot-password silently fails to find them (still returns 200 anti-enumeration response, but no OTP is ever created/sent). Recommend lowercasing email on register too, OR using a case-insensitive lookup in forgot-password. server.py:397 vs server.py:428."
+      },
+      {
+        "endpoint": "POST /api/auth/reset-password",
+        "issue": "Same lowercase-vs-original-case mismatch as forgot-password. Code does `email = data.email.lower().strip()` then `find_one({\"email\": email})`. Users with mixed-case stored emails get a misleading 400 'Invalid code or it has expired'. Fix together with the forgot-password normalization."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_new_endpoints.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Optional hardening: normalize emails on registration (lowercase + strip) so forgot/reset password flows can never silently miss a user. One-line fix: `\"email\": data.email.lower().strip()` in /auth/register and /auth/login. Not blocking.",
+    "Frontend follow-up (not in scope for this run): wire the new POST /api/auth/forgot-password and /api/auth/reset-password endpoints to a 'Forgot Password' screen, and consume GET /api/todos/{id} + /comments in the todo detail screen. Backend is ready."
+  ],
+  "critical_code_review_comments": [
+    "server.py:422–452 forgot_password: correctly anti-enumeration (always 200), invalidates old codes via delete_many before issuing a new one, TTL 15 min, password_reset row stores bcrypt hash of the OTP (never plaintext) — good security posture.",
+    "server.py:455–499 reset_password: short-password check (≥6), iterates only unused+non-expired candidates, marks used + cleans up siblings, returns fresh JWT. Correctly prevents reuse.",
+    "server.py:276–300 send_resend_email: gracefully handles missing API key, logs failure but doesn't raise — call site already returns 200 regardless. The current Resend sandbox 403 for non-owner recipients is logged but does not break the flow. Good.",
+    "server.py:791–802 get_single_todo: clean permission check (owner OR in shared_with) returning 403/404 appropriately. ObjectId stripped via projection. Looks correct.",
+    "server.py:806–887 comments: list & post both gate on participation; POST validates text empty/length; notification fanout uses a set, discards commenter id — fanout logic verified by tests for both owner-as-commenter and shared-user-as-commenter cases.",
+    "server.py:885–887 add_comment: explicit `comment.pop('_id', None)` before returning — Mongo _id correctly excluded from JSON response.",
+    "Note (still present from previous iteration): server.py is 1481 lines — over the 700-line guideline. Consider splitting auth/todos/comments/friends into routers. Non-blocking.",
+    "Note: server.py:32 JWT_SECRET still has a code default fallback. Should be required from env in production. Non-blocking.",
+    "Minor: in server.py register/login, emails are stored/compared without case normalization. forgot-password and reset-password both lowercase. This case mismatch is the only real bug surfaced this run (see backend_issues.minor)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_new_endpoints.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (22/22 pytest on new endpoints)",
+    "frontend": "not tested (backend-only per request)"
+  },
+  "seed_data_creation": "Per run, the test file registers 3 throwaway lowercase TEST_*@todoshare.app users (shared / stranger / reset / regression) via /api/auth/register. The shared todo created by the reviewer is hard-deleted by the fixture teardown. The TEST_* users remain in MongoDB but are clearly prefixed and harmless. No production data is touched. The reviewer@todoshare.app password is NOT modified by these tests (the reset-password flow targets a freshly-registered throwaway user).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: `MONGO_URL=\"mongodb://localhost:27017\" DB_NAME=\"test_database\" BACKEND_TEST_URL=\"http://localhost:8001\" pytest /app/backend/tests/test_new_endpoints.py -v --junitxml=/app/test_reports/pytest/pytest_results.xml`. The test uses direct Mongo access (motor) to override the OTP code_hash with a known plaintext because Resend sandbox refuses to deliver to anything other than fcycantablet@gmail.com — this is the documented expected behavior. The alt seed user krmkrmozy@gmail.com / Test123123. listed in the review request DOES NOT EXIST on this local DB (login returned 401) — only reviewer@todoshare.app works. The older /app/backend/tests/backend_test.py points at a stale preview URL (remind-together-6...) and should not be used; the apple regression file is in /app/backend/tests/test_apple_resubmit_regression.py.",
+  "rca_of_issue": "N/A — all requested new endpoints behave as specified. The only real defect surfaced is a pre-existing email-case inconsistency between register/login (case-preserving) and forgot/reset-password (lowercasing). For users registered with all-lowercase emails (which is the common case and is enforced by the iOS UI), the new flows work end-to-end."
+}

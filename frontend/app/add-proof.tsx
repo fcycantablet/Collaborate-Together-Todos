@@ -37,7 +37,7 @@ export default function AddProof() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const pickImage = async () => {
+  const pickFromGallery = async () => {
     if (images.length >= MAX_IMAGES) {
       setError(`Maximum ${MAX_IMAGES} images`);
       return;
@@ -73,6 +73,53 @@ export default function AddProof() {
     }
   };
 
+  const pickFromCamera = async () => {
+    if (images.length >= MAX_IMAGES) {
+      setError(`Maximum ${MAX_IMAGES} images`);
+      return;
+    }
+    try {
+      if (Platform.OS === "web") return pickFromGallery();
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert("Camera Permission Needed", "Please allow camera access in Settings.");
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.4,
+        base64: true,
+        allowsEditing: false,
+      });
+      if (!result.canceled && result.assets?.[0]) {
+        const a = result.assets[0];
+        const img = a.base64 ? `data:image/jpeg;base64,${a.base64}` : a.uri;
+        const combined = [...images, img].slice(0, MAX_IMAGES);
+        setImages(combined);
+        setError("");
+      }
+    } catch (e: any) {
+      setError(e.message || "Failed to capture image");
+    }
+  };
+
+  const pickImage = () => {
+    if (Platform.OS === "web") {
+      pickFromGallery();
+      return;
+    }
+    Alert.alert(
+      "Add proof photo",
+      "Choose how to add a photo",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Choose from Gallery", onPress: pickFromGallery },
+        { text: "Take Photo", onPress: pickFromCamera },
+      ],
+      { cancelable: true }
+    );
+  };
+
   const removeAt = (idx: number) => {
     setImages((arr) => arr.filter((_, i) => i !== idx));
   };
@@ -105,7 +152,7 @@ export default function AddProof() {
           <Ionicons name="camera" size={28} color={colors.text} />
           <Text style={styles.bannerTitle} numberOfLines={2}>{todoTitle}</Text>
           <Text style={styles.bannerDesc}>
-            Add up to {MAX_IMAGES} photos to show what's done
+            Add up to {MAX_IMAGES} photos to show what&apos;s done
           </Text>
         </View>
 

@@ -103,6 +103,12 @@ export default function Login() {
               )}
             </TouchableOpacity>
 
+            <Link href="/(auth)/forgot-password" asChild>
+              <TouchableOpacity testID="forgot-password-link" style={styles.forgotBtn} activeOpacity={0.7}>
+                <Text style={styles.forgotText}>FORGOT PASSWORD?</Text>
+              </TouchableOpacity>
+            </Link>
+
             <View style={styles.footerRow}>
               <Text style={styles.footerText}>No account?</Text>
               <Link href="/(auth)/register" asChild>
@@ -207,4 +213,6 @@ const styles = StyleSheet.create({
   },
   footerText: { color: colors.textSecondary, fontWeight: "600" },
   linkText: { color: colors.text, fontWeight: "900", letterSpacing: 1 },
+  forgotBtn: { paddingVertical: 14, alignItems: "center", marginTop: 8 },
+  forgotText: { color: colors.text, fontWeight: "900", letterSpacing: 1.5, fontSize: 11 },
 });

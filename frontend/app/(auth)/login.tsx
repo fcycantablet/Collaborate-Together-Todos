@@ -103,11 +103,8 @@ export default function Login() {
               )}
             </TouchableOpacity>
 
-            <Link href="/(auth)/forgot-password" asChild>
-              <TouchableOpacity testID="forgot-password-link" style={styles.forgotBtn} activeOpacity={0.7}>
-                <Text style={styles.forgotText}>FORGOT PASSWORD?</Text>
-              </TouchableOpacity>
-            </Link>
+            {/* Forgot Password link hidden — requires verified domain on Resend.
+                Backend endpoints + screens remain in codebase for easy re-enable. */}
 
             <View style={styles.footerRow}>
               <Text style={styles.footerText}>No account?</Text>

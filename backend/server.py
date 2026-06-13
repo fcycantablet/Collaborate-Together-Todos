@@ -380,7 +380,8 @@ def schedule_todo_notification(todo_id: str, scheduled_at_iso: str):
 # ============ AUTH ROUTES ============
 @api_router.post("/auth/register", response_model=AuthResponse)
 async def register(data: UserRegister):
-    existing = await db.users.find_one({"email": data.email})
+    email = data.email.lower().strip()
+    existing = await db.users.find_one({"email": email})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
@@ -394,7 +395,7 @@ async def register(data: UserRegister):
     now = datetime.now(timezone.utc).isoformat()
     user_doc = {
         "id": user_id,
-        "email": data.email,
+        "email": email,
         "password_hash": hash_password(data.password),
         "name": data.name,
         "user_code": code,
@@ -403,14 +404,15 @@ async def register(data: UserRegister):
     }
     await db.users.insert_one(user_doc)
 
-    token = create_jwt_token(user_id, data.email)
+    token = create_jwt_token(user_id, email)
     user_resp = user_to_response(user_doc)
     return AuthResponse(token=token, user=user_resp)
 
 
 @api_router.post("/auth/login", response_model=AuthResponse)
 async def login(data: UserLogin):
-    user = await db.users.find_one({"email": data.email})
+    email = data.email.lower().strip()
+    user = await db.users.find_one({"email": email})
     if not user or not verify_password(data.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 

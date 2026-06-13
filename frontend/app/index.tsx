@@ -2,11 +2,17 @@ import React, { useEffect } from "react";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "../src/auth";
+import { pingServer } from "../src/api";
 import { colors } from "../src/theme";
 
 export default function Index() {
   const { user, loading } = useAuth();
   const router = useRouter();
+
+  // Wake the backend immediately on app launch (cold-start guard)
+  useEffect(() => {
+    pingServer();
+  }, []);
 
   useEffect(() => {
     if (loading) return;

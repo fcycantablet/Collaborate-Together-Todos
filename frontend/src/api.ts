@@ -1,7 +1,19 @@
 import { getItem } from "./storage";
 
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || "https://collaborate-together-api.onrender.com";
 export const API_BASE = `${BACKEND_URL}/api`;
+
+const REQUEST_TIMEOUT_MS = 30000;
+
+// Fire-and-forget warm-up ping. Wakes a sleeping server (Render free tier)
+// as early as possible so login/register never hang on a cold start.
+export function pingServer(): void {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60000);
+  fetch(`${API_BASE}/`, { signal: controller.signal })
+    .catch(() => {})
+    .finally(() => clearTimeout(timer));
+}
 
 async function request(path: string, opts: RequestInit = {}, auth = true): Promise<any> {
   const headers: Record<string, string> = {
@@ -12,7 +24,19 @@ async function request(path: string, opts: RequestInit = {}, auth = true): Promi
     const token = await getItem("auth_token");
     if (token) headers["Authorization"] = `Bearer ${token}`;
   }
-  const res = await fetch(`${API_BASE}${path}`, { ...opts, headers });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { ...opts, headers, signal: controller.signal });
+  } catch (e: any) {
+    if (e?.name === "AbortError") {
+      throw new Error("The server is taking too long to respond. Please try again in a moment.");
+    }
+    throw new Error("Network error. Please check your connection and try again.");
+  } finally {
+    clearTimeout(timer);
+  }
   const text = await res.text();
   let data: any = null;
   try {
@@ -35,6 +59,8 @@ export const api = {
   me: () => request("/auth/me"),
   updatePushToken: (push_token: string) =>
     request("/auth/push-token", { method: "POST", body: JSON.stringify({ push_token }) }),
+  deleteAccount: (password: string) =>
+    request("/auth/account", { method: "DELETE", body: JSON.stringify({ password }) }),
 
   getMyTodos: () => request("/todos"),
   getSharedTodos: () => request("/todos/shared"),

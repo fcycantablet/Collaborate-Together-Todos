@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { Platform } from "react-native";
+import { Platform, InteractionManager } from "react-native";
 import { api } from "./api";
 import { getItem, setItem, removeItem } from "./storage";
 
@@ -47,28 +47,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkAuth();
   }, [checkAuth]);
 
-  // Register push token after auth
+  // Register push token after auth.
+  // Deferred (2.5s + after interactions) and timeout-guarded so the system
+  // permission prompt never races the post-login navigation transition and
+  // a hanging native call can never block anything (App Review freeze fix).
   useEffect(() => {
     if (!user || Platform.OS === "web") return;
-    (async () => {
-      try {
-        const Notifications = await import("expo-notifications");
-        const { status: existing } = await Notifications.getPermissionsAsync();
-        let final = existing;
-        if (existing !== "granted") {
-          const { status } = await Notifications.requestPermissionsAsync();
-          final = status;
+    let cancelled = false;
+
+    const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
+      Promise.race([
+        p,
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
+      ]);
+
+    const timer = setTimeout(() => {
+      InteractionManager.runAfterInteractions(async () => {
+        if (cancelled) return;
+        try {
+          const Notifications = await import("expo-notifications");
+          const { status: existing } = await withTimeout(Notifications.getPermissionsAsync(), 10000);
+          let final = existing;
+          if (existing !== "granted") {
+            // User-driven system dialog — no timeout on purpose
+            const { status } = await Notifications.requestPermissionsAsync();
+            final = status;
+          }
+          if (cancelled || final !== "granted") return;
+          const tokenRes = await withTimeout(Notifications.getExpoPushTokenAsync(), 15000).catch(() => null);
+          const pushToken = tokenRes?.data;
+          if (pushToken && !cancelled) {
+            await api.updatePushToken(pushToken);
+          }
+        } catch (e) {
+          console.log("Push token registration failed", e);
         }
-        if (final !== "granted") return;
-        const tokenRes = await Notifications.getExpoPushTokenAsync().catch(() => null);
-        const pushToken = tokenRes?.data;
-        if (pushToken) {
-          await api.updatePushToken(pushToken);
-        }
-      } catch (e) {
-        console.log("Push token registration failed", e);
-      }
-    })();
+      });
+    }, 2500);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [user]);
 
   const login = async (email: string, password: string) => {

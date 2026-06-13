@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+screenshots/raw/
+.DS_Store
+.pytest_cache/
+.mypy_cache/

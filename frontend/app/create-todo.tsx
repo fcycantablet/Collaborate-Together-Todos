@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -264,6 +265,42 @@ export default function CreateTodo() {
       );
     }
     const DateTimePicker = require("@react-native-community/datetimepicker").default;
+
+    // iOS (iPhone AND iPad): present picker in a modal with spinner display.
+    // The previous inline/compact rendering silently failed on iPad because the
+    // popover had no space to anchor inside the flex row.
+    const renderIOSPickerSheet = (
+      visible: boolean,
+      mode: "date" | "time",
+      onChange: (event: any, d?: Date) => void,
+      onClose: () => void
+    ) => (
+      <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+        <View style={styles.pickerOverlay}>
+          <View style={styles.pickerSheet}>
+            <Text style={styles.pickerTitle}>{mode === "date" ? "PICK A DATE" : "PICK A TIME"}</Text>
+            <DateTimePicker
+              value={date}
+              mode={mode}
+              display="spinner"
+              themeVariant="light"
+              minimumDate={mode === "date" ? new Date() : undefined}
+              onChange={onChange}
+              style={{ alignSelf: "center" }}
+            />
+            <TouchableOpacity
+              testID={`${mode}-picker-done`}
+              style={styles.pickerDoneBtn}
+              onPress={onClose}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.pickerDoneText}>DONE</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    );
+
     return (
       <View style={{ flexDirection: "row", gap: 10 }}>
         <TouchableOpacity
@@ -280,11 +317,20 @@ export default function CreateTodo() {
         >
           <Text style={styles.inputText}>{format(date, "h:mm a")}</Text>
         </TouchableOpacity>
-        {showDatePicker && (
-          <DateTimePicker value={date} mode="date" minimumDate={new Date()} onChange={onChangeDate} />
-        )}
-        {showTimePicker && (
-          <DateTimePicker value={date} mode="time" onChange={onChangeTime} />
+        {Platform.OS === "ios" ? (
+          <>
+            {renderIOSPickerSheet(showDatePicker, "date", onChangeDate, () => setShowDatePicker(false))}
+            {renderIOSPickerSheet(showTimePicker, "time", onChangeTime, () => setShowTimePicker(false))}
+          </>
+        ) : (
+          <>
+            {showDatePicker && (
+              <DateTimePicker value={date} mode="date" minimumDate={new Date()} onChange={onChangeDate} />
+            )}
+            {showTimePicker && (
+              <DateTimePicker value={date} mode="time" onChange={onChangeTime} />
+            )}
+          </>
         )}
       </View>
     );
@@ -645,4 +691,42 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 2, height: 2 },
   },
   addFriendsText: { fontSize: 11, fontWeight: "900", letterSpacing: 1.5, color: colors.text },
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    padding: 24,
+  },
+  pickerSheet: {
+    backgroundColor: "#fff",
+    borderWidth: 2,
+    borderColor: colors.border,
+    padding: 20,
+    maxWidth: 420,
+    width: "100%",
+    alignSelf: "center",
+    ...shadows.brutal,
+  },
+  pickerTitle: {
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 2,
+    color: colors.text,
+    textAlign: "center",
+    marginBottom: 4,
+  },
+  pickerDoneBtn: {
+    backgroundColor: colors.text,
+    borderWidth: 2,
+    borderColor: colors.border,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 12,
+  },
+  pickerDoneText: {
+    color: colors.inverse,
+    fontWeight: "900",
+    fontSize: 13,
+    letterSpacing: 2,
+  },
 });
